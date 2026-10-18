@@ -13,8 +13,8 @@ active_bots = {}
 bot_logs = {}
 
 def install_and_run_bot(bot_id, bot_dir, main_filename):
-    """Installs dependencies and runs the bot script with proper environment inheritance"""
-    bot_logs[bot_id] = [f"Starting execution for {main_filename}..."]
+    """Automatically cleans conflicting sessions and executes the bot"""
+    bot_logs[bot_id] = [f"Preparing multi-host environment for {main_filename}..."]
     
     try:
         main_file_path = os.path.join(bot_dir, main_filename)
@@ -52,9 +52,8 @@ def install_and_run_bot(bot_id, bot_dir, main_filename):
             subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             bot_logs[bot_id].append("Dependencies ready ✓")
             
-        bot_logs[bot_id].append(f"Executing bot process live...")
+        bot_logs[bot_id].append(f"Launching bot cluster process...")
         
-        # Inherit current system environment so API tokens and secrets pass through
         env = os.environ.copy()
         
         process = subprocess.Popen(
@@ -465,6 +464,14 @@ def index():
 
 @app.route("/api/deploy-multi", methods=["POST"])
 def deploy_multi():
+    # Terminate any existing active bots to avoid 409 Conflict clashes
+    for b_id, proc in list(active_bots.items()):
+        try:
+            proc.terminate()
+        except:
+            pass
+        active_bots.pop(b_id, None)
+
     uploaded_files = request.files.getlist("files")
     if not uploaded_files:
         return jsonify({"status": "error", "message": "No files provided"})
@@ -487,7 +494,7 @@ def deploy_multi():
     deployed_response = []
     for py_file in saved_py_files:
         bot_id = "bot_" + os.urandom(4).hex()
-        bot_logs[bot_id] = [f"Initializing background thread for {py_file}..."]
+        bot_logs[bot_id] = [f"Initializing fresh session for {py_file}..."]
         
         t = threading.Thread(target=install_and_run_bot, args=(bot_id, bot_dir, py_file), daemon=True)
         t.start()
