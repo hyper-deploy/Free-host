@@ -6,7 +6,6 @@ from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
-# Multi-hosting storage
 UPLOAD_FOLDER = "/tmp/neohost_bots"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -14,13 +13,12 @@ active_bots = {}
 bot_logs = {}
 
 def install_and_run_bot(bot_id, bot_dir, main_filename):
-    """Handles multi-file hosting, dependency scanning, and live execution"""
-    bot_logs[bot_id] = ["Initializing Multi-Hosting Environment...", "Scanning uploaded files and dependencies..."]
+    """Installs dependencies and runs the bot script with proper environment inheritance"""
+    bot_logs[bot_id] = [f"Starting execution for {main_filename}..."]
     
     try:
         main_file_path = os.path.join(bot_dir, main_filename)
         
-        # Read main script to find imports
         with open(main_file_path, "r", encoding="utf-8") as f:
             code_content = f.read()
             
@@ -52,21 +50,24 @@ def install_and_run_bot(bot_id, bot_dir, main_filename):
         if detected_pkgs:
             bot_logs[bot_id].append(f"Installing packages: {', '.join(detected_pkgs)}...")
             subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("All packages ready ✓")
+            bot_logs[bot_id].append("Dependencies ready ✓")
             
-        bot_logs[bot_id].append(f"Launching multi-hosted bot: {main_filename}...")
+        bot_logs[bot_id].append(f"Executing bot process live...")
         
-        # Run process inside the specific bot directory so relative files/configs work seamlessly
+        # Inherit current system environment so API tokens and secrets pass through
+        env = os.environ.copy()
+        
         process = subprocess.Popen(
             ["python", main_filename],
             cwd=bot_dir,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1
         )
         active_bots[bot_id] = process
-        bot_logs[bot_id].append("Multi-Bot process is now LIVE ✓")
+        bot_logs[bot_id].append("Bot process is now LIVE ✓")
         
         for line in process.stdout:
             msg = line.strip()
@@ -95,19 +96,16 @@ HTML_PAGE = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-
 :root {
   --cyan: #00f0ff; --magenta: #ff00e5; --purple: #7b2ff7; --green: #00ff88; --red: #ff3b6b; --yellow: #ffd60a;
   --bg: #05050a; --bg-2: #0a0a14; --card: rgba(255, 255, 255, 0.035); --card-hover: rgba(255, 255, 255, 0.06);
   --border: rgba(255, 255, 255, 0.08); --border-glow: rgba(0, 240, 255, 0.35);
   --text: #e8e8f0; --muted: #8a8a9a; --muted-2: #5a5a6a;
-  --radius: 16px; --radius-sm: 10px; --font: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
+  --radius: 16px; --font: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
 }
-
 html { scroll-behavior: smooth; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); overflow-x: hidden; min-height: 100vh; line-height: 1.6; }
 ::selection { background: var(--cyan); color: #000; }
-
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-2); }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--cyan), var(--purple)); border-radius: 10px; border: 2px solid var(--bg-2); }
@@ -252,20 +250,20 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
   <div>
     <div class="badge"><span class="dot"></span> Python 3.11 · Multi-Hosting Runtime</div>
     <h1>Deploy Multiple Bots.<br><span class="gradient">Simultaneously.</span></h1>
-    <p>Upload multiple Python files or project folders together. Run multiple Telegram bots at once on live cloud infrastructure.</p>
+    <p>Upload your python bot scripts or configuration files. Host multiple bots concurrently with live execution logs.</p>
     <div class="hero-cta">
       <button class="btn btn-primary" onclick="scrollToSection('deploy')">🚀 Deploy Multi-Bots</button>
       <button class="btn btn-ghost" onclick="scrollToSection('dashboard')">📊 View Fleet</button>
     </div>
   </div>
   <div class="code-window">
-    <div class="code-header"><div class="dots"><span></span><span></span><span></span></div><div class="filename">multi_bot.py</div></div>
+    <div class="code-header"><div class="dots"><span></span><span></span><span></span></div><div class="filename">bot.py</div></div>
     <div class="code-body">
-      <span class="kw">import</span> asyncio, logging<br>
-      <span class="cm"># Multi-hosting ready container</span><br>
-      <span class="kw">async def</span> <span class="fn">main</span>():<br>
-      &nbsp;&nbsp;<span class="kw">print</span>(<span class="str">"Running bot cluster..."</span>)<br>
-      asyncio.<span class="fn">run</span>(main())
+      <span class="kw">import</span> os, telebot<br>
+      bot = telebot.TeleBot(os.environ[<span class="str">"TOKEN"</span>])<br>
+      <span class="kw">@bot.message_handler</span>(commands=[<span class="str">'start'</span>])<br>
+      <span class="kw">def</span> <span class="fn">start</span>(m): bot.reply_to(m, <span class="str">"Online!"</span>)<br>
+      bot.infinity_polling()
     </div>
   </div>
 </div>
@@ -273,7 +271,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 <section id="features">
   <span class="section-tag">// multi-hosting capability</span>
   <h2 class="section-title">Run multiple bots <br>without limitations.</h2>
-  <p class="section-sub">Upload multiple files concurrently — each bot gets its own isolated multi-hosting process.</p>
+  <p class="section-sub">Upload multiple files concurrently — each bot gets its own isolated process.</p>
 
   <div class="features-grid">
     <div class="feature-card">
@@ -289,12 +287,12 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
     <div class="feature-card">
       <div class="feature-icon">📡</div>
       <h3>Real-Time Logs</h3>
-      <p>Switch between active bots to stream live stdout and debugging traces instantly.</p>
+      <p>Stream live stdout and debugging traces directly to your console.</p>
     </div>
     <div class="feature-card">
       <div class="feature-icon">♾️</div>
       <h3>24/7 Cloud Power</h3>
-      <p>Keep your bot cluster permanently online with zero downtime guarantees.</p>
+      <p>Keep your bot cluster permanently online with zero downtime.</p>
     </div>
   </div>
 </section>
@@ -383,7 +381,7 @@ function uploadMultipleFiles(files) {
   for (let i = 0; i < files.length; i++) {
     formData.append('files', files[i]);
     if (files[i].name.endsWith('.py') && !mainPy) {
-      mainPy = files[i].name; // Pick first .py file as main runner
+      mainPy = files[i].name;
     }
   }
 
@@ -392,14 +390,14 @@ function uploadMultipleFiles(files) {
     return;
   }
 
-  log(`Uploading ${files.length} file(s) for multi-hosting...`, 'sys');
+  log(`Uploading ${files.length} file(s) for multi-hosting execution...`, 'sys');
   fetch('/api/deploy-multi', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
     if (data.status === 'success') {
       data.bots.forEach(b => {
         bots.push(b);
-        log(`Multi-Bot <b>${b.name}</b> deployed successfully! ID: ${b.id}`, 'success');
+        log(`Bot <b>${b.name}</b> deployed and executed live! ID: ${b.id}`, 'success');
       });
       renderBots();
       if (data.bots.length > 0) {
@@ -489,7 +487,7 @@ def deploy_multi():
     deployed_response = []
     for py_file in saved_py_files:
         bot_id = "bot_" + os.urandom(4).hex()
-        bot_logs[bot_id] = [f"Preparing multi-host for {py_file}..."]
+        bot_logs[bot_id] = [f"Initializing background thread for {py_file}..."]
         
         t = threading.Thread(target=install_and_run_bot, args=(bot_id, bot_dir, py_file), daemon=True)
         t.start()
