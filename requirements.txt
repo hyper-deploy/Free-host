@@ -4,14 +4,4 @@ python-telegram-bot==20.8
 pyTelegramBotAPI==4.16.1
 pyrogram==2.0.106
 aiogram==3.4.1
-Tgcrypto==1.2.5
 requests==2.31.0
-beautifulsoup4==4.12.3
-aiohttp==3.9.3
-motor==3.3.2
-pymongo==4.6.1
-yt-dlp==2024.3.10
-Pillow==10.2.0
-openai==1.14.1
-gtts==2.5.1
-psutil==5.9.8
