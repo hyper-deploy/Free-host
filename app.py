@@ -6,15 +6,22 @@ from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
+# Multi-hosting storage
+UPLOAD_FOLDER = "/tmp/neohost_bots"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 active_bots = {}
 bot_logs = {}
 
-def install_and_run_bot(bot_id, file_path):
-    """Automatically scans imports, installs missing packages dynamically, and runs the bot"""
-    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script for modules/libraries..."]
+def install_and_run_bot(bot_id, bot_dir, main_filename):
+    """Handles multi-file hosting, dependency scanning, and live execution"""
+    bot_logs[bot_id] = ["Initializing Multi-Hosting Environment...", "Scanning uploaded files and dependencies..."]
     
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        main_file_path = os.path.join(bot_dir, main_filename)
+        
+        # Read main script to find imports
+        with open(main_file_path, "r", encoding="utf-8") as f:
             code_content = f.read()
             
         module_to_pkg = {
@@ -45,25 +52,27 @@ def install_and_run_bot(bot_id, file_path):
         if detected_pkgs:
             bot_logs[bot_id].append(f"Installing packages: {', '.join(detected_pkgs)}...")
             subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("All packages installed successfully ✓")
+            bot_logs[bot_id].append("All packages ready ✓")
             
-        bot_logs[bot_id].append("Launching bot process...")
+        bot_logs[bot_id].append(f"Launching multi-hosted bot: {main_filename}...")
         
+        # Run process inside the specific bot directory so relative files/configs work seamlessly
         process = subprocess.Popen(
-            ["python", file_path],
+            ["python", main_filename],
+            cwd=bot_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1
         )
         active_bots[bot_id] = process
-        bot_logs[bot_id].append("Bot process is now LIVE ✓")
+        bot_logs[bot_id].append("Multi-Bot process is now LIVE ✓")
         
         for line in process.stdout:
             msg = line.strip()
             if msg:
                 bot_logs[bot_id].append(msg)
-                if len(bot_logs[bot_id]) > 200:
+                if len(bot_logs[bot_id]) > 250:
                     bot_logs[bot_id].pop(0)
                     
     except Exception as e:
@@ -74,7 +83,7 @@ def install_and_run_bot(bot_id, file_path):
 
 
 # ====================================================
-# COMPLETE ORIGINAL DESIGN + REAL BACKEND
+# 100% ORIGINAL DESIGN + MULTI-HOSTING SUPPORT
 # ====================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -173,7 +182,6 @@ section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
 .section-title { font-size: clamp(1.8rem, 3.5vw, 2.7rem); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 14px; }
 .section-sub { color: var(--muted); max-width: 600px; margin-bottom: 50px; }
 
-/* Features Grid */
 .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
 .feature-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px 26px; backdrop-filter: blur(10px); transition: 0.3s; }
 .feature-card:hover { transform: translateY(-6px); border-color: var(--border-glow); background: var(--card-hover); }
@@ -242,73 +250,72 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 
 <div class="hero">
   <div>
-    <div class="badge"><span class="dot"></span> Python 3.11 · Live Cloud Runtime</div>
-    <h1>Deploy Python Bots.<br><span class="gradient">Lightning Fast.</span></h1>
-    <p>Upload your <code style="color:var(--cyan);">.py</code> file, hit start, and watch your bot execute live on Render cloud infrastructure.</p>
+    <div class="badge"><span class="dot"></span> Python 3.11 · Multi-Hosting Runtime</div>
+    <h1>Deploy Multiple Bots.<br><span class="gradient">Simultaneously.</span></h1>
+    <p>Upload multiple Python files or project folders together. Run multiple Telegram bots at once on live cloud infrastructure.</p>
     <div class="hero-cta">
-      <button class="btn btn-primary" onclick="scrollToSection('deploy')">🚀 Deploy a Bot</button>
-      <button class="btn btn-ghost" onclick="scrollToSection('dashboard')">📊 View Dashboard</button>
+      <button class="btn btn-primary" onclick="scrollToSection('deploy')">🚀 Deploy Multi-Bots</button>
+      <button class="btn btn-ghost" onclick="scrollToSection('dashboard')">📊 View Fleet</button>
     </div>
   </div>
   <div class="code-window">
-    <div class="code-header"><div class="dots"><span></span><span></span><span></span></div><div class="filename">bot.py</div></div>
+    <div class="code-header"><div class="dots"><span></span><span></span><span></span></div><div class="filename">multi_bot.py</div></div>
     <div class="code-body">
-      <span class="kw">import</span> os, telegram<br>
-      app = telegram.Application.builder().token(os.environ[<span class="str">"TOKEN"</span>]).build()<br>
-      <span class="kw">async def</span> <span class="fn">start</span>(update, context):<br>
-      &nbsp;&nbsp;<span class="kw">await</span> update.message.reply_text(<span class="str">"Bot is live!"</span>)<br>
-      app.run_polling()
+      <span class="kw">import</span> asyncio, logging<br>
+      <span class="cm"># Multi-hosting ready container</span><br>
+      <span class="kw">async def</span> <span class="fn">main</span>():<br>
+      &nbsp;&nbsp;<span class="kw">print</span>(<span class="str">"Running bot cluster..."</span>)<br>
+      asyncio.<span class="fn">run</span>(main())
     </div>
   </div>
 </div>
 
-<!-- FEATURES SECTION RESTORED -->
 <section id="features">
-  <span class="section-tag">// why neohost</span>
-  <h2 class="section-title">Built for developers, <br>by developers.</h2>
-  <p class="section-sub">Everything you need to ship and scale your Python bots — no DevOps required.</p>
+  <span class="section-tag">// multi-hosting capability</span>
+  <h2 class="section-title">Run multiple bots <br>without limitations.</h2>
+  <p class="section-sub">Upload multiple files concurrently — each bot gets its own isolated multi-hosting process.</p>
 
   <div class="features-grid">
     <div class="feature-card">
+      <div class="feature-icon">📂</div>
+      <h3>Multi-File Upload</h3>
+      <p>Select and send multiple .py files or custom configuration scripts at once.</p>
+    </div>
+    <div class="feature-card">
       <div class="feature-icon">⚡</div>
-      <h3>Instant Deploy</h3>
-      <p>Drag & drop your <b>.py</b> file and it's running in under 2 seconds. Auto‑restart included.</p>
+      <h3>Simultaneous Run</h3>
+      <p>Host several Telegram bots concurrently without interrupting each other.</p>
     </div>
     <div class="feature-card">
       <div class="feature-icon">📡</div>
-      <h3>Live Console</h3>
-      <p>Real‑time stdout, stderr, and trace logs streamed directly to your browser.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🛡️</div>
-      <h3>Isolated Sandbox</h3>
-      <p>Every bot runs in its own secure environment with robust package support.</p>
+      <h3>Real-Time Logs</h3>
+      <p>Switch between active bots to stream live stdout and debugging traces instantly.</p>
     </div>
     <div class="feature-card">
       <div class="feature-icon">♾️</div>
-      <h3>24/7 Uptime</h3>
-      <p>Global cloud infrastructure keeps your Telegram and Python bots online permanently.</p>
+      <h3>24/7 Cloud Power</h3>
+      <p>Keep your bot cluster permanently online with zero downtime guarantees.</p>
     </div>
   </div>
 </section>
 
 <section id="deploy">
-  <span class="section-tag">// deploy zone</span>
-  <h2 class="section-title">Upload your <span style="color:var(--cyan)">.py</span> bot</h2>
-  <p class="section-sub">Drop any Telegram bot script below to execute it live on the server.</p>
+  <span class="section-tag">// multi-deploy zone</span>
+  <h2 class="section-title">Upload your <span style="color:var(--cyan)">bot files</span></h2>
+  <p class="section-sub">Select multiple files (or drag & drop them) to host and run them simultaneously.</p>
   <div class="deploy-wrap">
     <div class="dropzone" id="dropzone">
       <div class="dz-icon">📦</div>
-      <h3>Drop your <code style="color:var(--cyan)">.py</code> file here</h3>
-      <p>or click to browse</p>
-      <input type="file" id="fileInput" accept=".py" hidden />
+      <h3>Drop your <code style="color:var(--cyan)">.py</code> files here</h3>
+      <p>or click to select multiple files</p>
+      <input type="file" id="fileInput" accept=".py,.txt,.env" multiple hidden />
     </div>
     <div class="deploy-side">
-      <h4>✅ Universal Runtime Checklist</h4>
+      <h4>✅ Multi-Hosting Checklist</h4>
       <ul>
-        <li><span class="check">✓</span> Auto-installs all modules (telegram, pyrogram, etc.)</li>
-        <li><span class="check">✓</span> Uses `os.environ` for tokens</li>
-        <li><span class="check">✓</span> Real-time stdout console logs active</li>
+        <li><span class="check">✓</span> Select multiple .py files together</li>
+        <li><span class="check">✓</span> Auto-installs required python libraries</li>
+        <li><span class="check">✓</span> Individual stop and monitor controls</li>
       </ul>
     </div>
   </div>
@@ -316,31 +323,31 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 
 <section id="dashboard">
   <span class="section-tag">// dashboard</span>
-  <h2 class="section-title">Your active fleet</h2>
+  <h2 class="section-title">Your bot cluster</h2>
   <div class="dashboard">
     <div class="bots-panel">
       <div class="panel-head">
-        <h3>🤖 Deployed Bots <span class="count-badge" id="botCount">0</span></h3>
+        <h3>🤖 Active Cluster <span class="count-badge" id="botCount">0</span></h3>
       </div>
       <div class="bots-list" id="botsList">
         <div class="empty-state" id="emptyState">
-          <p>No bots running yet — upload a file above.</p>
+          <p>No bots running in cluster — upload files above.</p>
         </div>
       </div>
     </div>
     <div class="console-panel">
       <div class="console-head">
-        <h3>📡 Real-Time Server Console</h3>
+        <h3>📡 Cluster Console</h3>
         <button class="btn btn-ghost btn-sm" onclick="clearConsole()">Clear</button>
       </div>
       <div class="console-body" id="consoleBody">
-        <div class="console-line sys"><span class="time">--:--:--</span><span class="msg"><span class="prefix">neohost</span> › Universal Python runtime ready.</span></div>
+        <div class="console-line sys"><span class="time">--:--:--</span><span class="msg"><span class="prefix">neohost</span> › Multi-Hosting runtime online.</span></div>
       </div>
     </div>
   </div>
 </section>
 
-<footer><p>© 2026 NeoHost — Universal Python Bot Cloud Hosting.</p></footer>
+<footer><p>© 2026 NeoHost — Multi-Hosting Python Bot Cloud.</p></footer>
 
 <script>
 const bots = [];
@@ -367,26 +374,40 @@ function log(msg, type = 'sys', source = 'neohost') {
 function clearConsole() { consoleBody.innerHTML = ''; log('Console cleared.', 'sys'); }
 
 dropzone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => { if (e.target.files.length) uploadAndRun(e.target.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files.length) uploadMultipleFiles(e.target.files); });
 
-function uploadAndRun(file) {
-  if (!file.name.endsWith('.py')) { alert('Only .py files accepted'); return; }
+function uploadMultipleFiles(files) {
   const formData = new FormData();
-  formData.append('file', file);
+  let mainPy = null;
+  
+  for (let i = 0; i < files.length; i++) {
+    formData.append('files', files[i]);
+    if (files[i].name.endsWith('.py') && !mainPy) {
+      mainPy = files[i].name; // Pick first .py file as main runner
+    }
+  }
 
-  log(`Uploading ${file.name} & installing packages...`, 'sys');
-  fetch('/api/deploy', { method: 'POST', body: formData })
+  if (!mainPy) {
+    alert('Please include at least one .py file!');
+    return;
+  }
+
+  log(`Uploading ${files.length} file(s) for multi-hosting...`, 'sys');
+  fetch('/api/deploy-multi', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
     if (data.status === 'success') {
-      const bot = { id: data.bot_id, name: file.name, status: 'running' };
-      bots.push(bot);
-      activeBotId = data.bot_id;
+      data.bots.forEach(b => {
+        bots.push(b);
+        log(`Multi-Bot <b>${b.name}</b> deployed successfully! ID: ${b.id}`, 'success');
+      });
       renderBots();
-      log(`Bot <b>${file.name}</b> runtime successfully started!`, 'success');
-      startLogPolling();
+      if (data.bots.length > 0) {
+        activeBotId = data.bots[data.bots.length - 1].id;
+        startLogPolling();
+      }
     } else {
-      log(`Failed to deploy: ${data.message}`, 'sys');
+      log(`Deployment failed: ${data.message}`, 'sys');
     }
   });
 }
@@ -444,22 +465,38 @@ function startLogPolling() {
 def index():
     return render_template_string(HTML_PAGE)
 
-@app.route("/api/deploy", methods=["POST"])
-def deploy():
-    if 'file' not in request.files:
-        return jsonify({"status": "error", "message": "No file provided"})
-    file = request.files['file']
-    if not file.filename.endswith('.py'):
-        return jsonify({"status": "error", "message": "Invalid extension"})
+@app.route("/api/deploy-multi", methods=["POST"])
+def deploy_multi():
+    uploaded_files = request.files.getlist("files")
+    if not uploaded_files:
+        return jsonify({"status": "error", "message": "No files provided"})
     
-    bot_id = "bot_" + os.urandom(3).hex()
-    file_path = os.path.join("/tmp", f"{bot_id}_{file.filename}")
-    file.save(file_path)
+    bot_session_id = "cluster_" + os.urandom(3).hex()
+    bot_dir = os.path.join(UPLOAD_FOLDER, bot_session_id)
+    os.makedirs(bot_dir, exist_ok=True)
     
-    t = threading.Thread(target=install_and_run_bot, args=(bot_id, file_path), daemon=True)
-    t.start()
+    saved_py_files = []
+    for file in uploaded_files:
+        if file.filename:
+            file_path = os.path.join(bot_dir, file.filename)
+            file.save(file_path)
+            if file.filename.endswith('.py'):
+                saved_py_files.append(file.filename)
+                
+    if not saved_py_files:
+        return jsonify({"status": "error", "message": "No .py files found in selection"})
     
-    return jsonify({"status": "success", "bot_id": bot_id})
+    deployed_response = []
+    for py_file in saved_py_files:
+        bot_id = "bot_" + os.urandom(4).hex()
+        bot_logs[bot_id] = [f"Preparing multi-host for {py_file}..."]
+        
+        t = threading.Thread(target=install_and_run_bot, args=(bot_id, bot_dir, py_file), daemon=True)
+        t.start()
+        
+        deployed_response.append({"id": bot_id, "name": py_file})
+        
+    return jsonify({"status": "success", "bots": deployed_response})
 
 @app.route("/api/logs/<bot_id>")
 def get_logs(bot_id):
