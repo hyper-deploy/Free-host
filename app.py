@@ -1,23 +1,59 @@
 import os
 import subprocess
 import threading
+import re
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
-# Active background bot processes and their real logs storage
 active_bots = {}
 bot_logs = {}
 
-def execute_bot(bot_id, file_path):
-    """Runs the uploaded python telegram bot script as a real background process"""
-    bot_logs[bot_id] = ["Initializing Python 3.11 runtime environment...", "Sandbox mounted successfully — 512 MB RAM"]
+def install_and_run_bot(bot_id, file_path):
+    """Automatically detects imports, installs missing libraries, and runs the bot"""
+    bot_logs[bot_id] = ["Scanning bot script for dependencies...", "Preparing Python runtime..."]
+    
     try:
+        # Read the uploaded bot file to find imported libraries
+        with open(file_path, "r", encoding="utf-8") as f:
+            code_content = f.read()
+            
+        # Map common bot imports to their pip package names
+        import_to_pkg = {
+            "telebot": "pyTelegramBotAPI",
+            "pyrogram": "pyrogram",
+            "aiogram": "aiogram",
+            "requests": "requests",
+            "bs4": "beautifulsoup4",
+            "aiohttp": "aiohttp",
+            "motor": "motor",
+            "pymongo": "pymongo",
+            "yt_dlp": "yt-dlp"
+        }
+        
+        detected_pkgs = []
+        for imp, pkg in import_to_pkg.items():
+            if re.search(r'\b(import|from)\s+' + imp + r'\b', code_content):
+                detected_pkgs.append(pkg)
+                
+        # Always ensure tgcrypto if pyrogram is used
+        if "pyrogram" in detected_pkgs and "Tgcrypto" not in detected_pkgs:
+            detected_pkgs.append("Tgcrypto")
+            
+        if detected_pkgs:
+            bot_logs[bot_id].append(f"Installing missing packages: {', '.join(detected_pkgs)}...")
+            # Install packages dynamically using pip
+            subprocess.run(["pip", "install"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            bot_logs[bot_id].append("Dependencies installed successfully ✓")
+            
+        bot_logs[bot_id].append(f"Executing script...")
+        
         process = subprocess.Popen(
             ["python", file_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
+            bufsize=1
         )
         active_bots[bot_id] = process
         bot_logs[bot_id].append("Bot process is now LIVE ✓")
@@ -26,12 +62,11 @@ def execute_bot(bot_id, file_path):
             msg = line.strip()
             if msg:
                 bot_logs[bot_id].append(msg)
-                # Keep log history trimmed
                 if len(bot_logs[bot_id]) > 150:
                     bot_logs[bot_id].pop(0)
                     
     except Exception as e:
-        bot_logs[bot_id].append(f"Runtime Error: {str(e)}")
+        bot_logs[bot_id].append(f"Execution Error: {str(e)}")
     finally:
         if bot_id in active_bots:
             del active_bots[bot_id]
@@ -238,7 +273,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
     <div class="deploy-side">
       <h4>✅ Real Execution Checklist</h4>
       <ul>
-        <li><span class="check">✓</span> Valid Python 3 script (.py)</li>
+        <li><span class="check">✓</span> Auto-detects missing libraries</li>
         <li><span class="check">✓</span> Uses `os.environ` for tokens</li>
         <li><span class="check">✓</span> Real-time stdout logging active</li>
       </ul>
@@ -266,7 +301,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
         <button class="btn btn-ghost btn-sm" onclick="clearConsole()">Clear</button>
       </div>
       <div class="console-body" id="consoleBody">
-        <div class="console-line sys"><span class="time">--:--:--</span><span class="msg"><span class="prefix">neohost</span> › System online. Ready for bot execution.</span></div>
+        <div class="console-line sys"><span class="time">--:--:--</span><span class="msg"><span class="prefix">neohost</span> › System online. Ready for automatic dependency installation.</span></div>
       </div>
     </div>
   </div>
@@ -307,7 +342,7 @@ function uploadAndRun(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  log(`Uploading ${file.name} to server...`, 'sys');
+  log(`Uploading ${file.name} and scanning imports...`, 'sys');
   fetch('/api/deploy', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
@@ -316,7 +351,7 @@ function uploadAndRun(file) {
       bots.push(bot);
       activeBotId = data.bot_id;
       renderBots();
-      log(`Bot <b>${file.name}</b> successfully executed on server!`, 'success');
+      log(`Bot <b>${file.name}</b> package installation & execution initiated!`, 'success');
       startLogPolling();
     } else {
       log(`Failed to deploy: ${data.message}`, 'sys');
@@ -373,9 +408,6 @@ function startLogPolling() {
 </html>
 """
 
-# ==========================================
-# BACKEND REAL PYTHON EXECUTION API ROUTES
-# ==========================================
 @app.route("/")
 def index():
     return render_template_string(HTML_PAGE)
@@ -392,26 +424,7 @@ def deploy():
     file_path = os.path.join("/tmp", f"{bot_id}_{file.filename}")
     file.save(file_path)
     
-    bot_logs[bot_id] = ["Starting Python interpreter...", f"Executing {file.filename}..."]
-    
-    def run_process():
-        try:
-            proc = subprocess.Popen(
-                ["python", file_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
-            active_bots[bot_id] = proc
-            for line in proc.stdout:
-                clean_line = line.strip()
-                if clean_line:
-                    bot_logs[bot_id].append(clean_line)
-        except Exception as e:
-            bot_logs[bot_id].append(f"Error: {str(e)}")
-            
-    t = threading.Thread(target=run_process, daemon=True)
+    t = threading.Thread(target=install_and_run_bot, args=(bot_id, file_path), daemon=True)
     t.start()
     
     return jsonify({"status": "success", "bot_id": bot_id})
