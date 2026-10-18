@@ -1,7 +1,2 @@
 Flask==3.0.2
 gunicorn==21.2.0
-python-telegram-bot==20.8
-pyTelegramBotAPI==4.16.1
-pyrogram==2.0.106
-aiogram==3.4.1
-requests==2.31.0
