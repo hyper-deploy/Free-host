@@ -1,2 +1,6 @@
 Flask==3.0.2
 gunicorn==21.2.0
+pyrogram==2.0.106
+Tgcrypto==1.2.5
+pyTelegramBotAPI==4.16.1
+aiogram==3.4.1
