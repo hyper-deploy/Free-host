@@ -10,8 +10,8 @@ active_bots = {}
 bot_logs = {}
 
 def install_and_run_bot(bot_id, file_path):
-    """Scans any imports, installs missing packages dynamically, and runs the bot"""
-    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script for modules/libraries..."]
+    """Dynamically installs missing libraries and runs the bot safely"""
+    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script dependencies..."]
     
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -27,8 +27,7 @@ def install_and_run_bot(bot_id, file_path):
             "aiohttp": "aiohttp",
             "motor": "motor",
             "pymongo": "pymongo",
-            "yt_dlp": "yt_dlp",
-            "PIL": "Pillow",
+            "yt_dlp": "yt-dlp",
             "openai": "openai",
             "gtts": "gtts",
             "psutil": "psutil"
@@ -43,9 +42,10 @@ def install_and_run_bot(bot_id, file_path):
             detected_pkgs.append("Tgcrypto")
             
         if detected_pkgs:
-            bot_logs[bot_id].append(f"Installing detected packages: {', '.join(detected_pkgs)}...")
-            subprocess.run(["pip", "install"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("All packages installed ✓")
+            bot_logs[bot_id].append(f"Installing missing packages: {', '.join(detected_pkgs)}...")
+            # Use --prefer-binary to avoid building from source and preventing build fails
+            subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            bot_logs[bot_id].append("Packages installed successfully ✓")
             
         bot_logs[bot_id].append("Launching bot process...")
         
