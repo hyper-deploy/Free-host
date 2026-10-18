@@ -21,7 +21,6 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
         file_ext = os.path.splitext(filename)[1].lower()
         target_dir = bot_dir
         
-        # Handle ZIP Archives
         if file_ext == '.zip':
             bot_logs[bot_id].append("Extracting ZIP archive...")
             zip_path = os.path.join(bot_dir, filename)
@@ -32,19 +31,14 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
                 zip_ref.extractall(extract_dir)
             
             target_dir = extract_dir
-            # Look for main entry files inside extracted folder
             files_in_ext = os.listdir(target_dir)
             if 'main.py' in files_in_ext:
-                filename = 'main.py'
-                file_ext = '.py'
+                filename = 'main.py'; file_ext = '.py'
             elif 'index.js' in files_in_ext:
-                filename = 'index.js'
-                file_ext = '.js'
+                filename = 'index.js'; file_ext = '.js'
             elif 'index.php' in files_in_ext:
-                filename = 'index.php'
-                file_ext = '.php'
+                filename = 'index.php'; file_ext = '.php'
             else:
-                # Find first python or js file
                 found = False
                 for f in files_in_ext:
                     if f.endswith('.py'):
@@ -59,9 +53,8 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
 
         file_path = os.path.join(target_dir, filename)
         
-        # 1. PYTHON RUNTIME (.py)
         if file_ext == '.py':
-            bot_logs[bot_id].append("Scanning Python script dependencies...")
+            bot_logs[bot_id].append("Scanning Python dependencies...")
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 code = f.read()
                 
@@ -90,21 +83,14 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
                 subprocess.run(["pip", "install", "--prefer-binary"] + detected, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 bot_logs[bot_id].append("Python packages ready ✓")
                 
-            bot_logs[bot_id].append(f"Executing Python process: {filename}...")
             cmd = ["python", filename]
 
-        # 2. NODE.JS RUNTIME (.js)
         elif file_ext == '.js':
-            bot_logs[bot_id].append("Checking Node.js environment & package.json...")
             if os.path.exists(os.path.join(target_dir, "package.json")):
-                bot_logs[bot_id].append("Running npm install...")
                 subprocess.run(["npm", "install"], cwd=target_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append(f"Executing Node.js process: {filename}...")
             cmd = ["node", filename]
 
-        # 3. PHP RUNTIME (.php)
         elif file_ext == '.php':
-            bot_logs[bot_id].append(f"Launching PHP built-in server for {filename}...")
             port = str(8000 + (hash(bot_id) % 1000))
             cmd = ["php", "-S", f"0.0.0.0:{port}", filename]
 
@@ -122,7 +108,7 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
             text=True,
             bufsize=1
         )
-        active_bots[bot_id] = process
+        active_bots[bot_id] = {"process": process, "name": filename}
         bot_logs[bot_id].append("Process is now LIVE ✓")
         
         for line in process.stdout:
@@ -135,12 +121,12 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
     except Exception as e:
         bot_logs[bot_id].append(f"Execution Error: {str(e)}")
     finally:
-        if bot_id in active_bots:
+        if bot_id in active_bots and active_bots[bot_id]["process"].poll() is not None:
             del active_bots[bot_id]
 
 
 # ====================================================
-# 100% ORIGINAL DESIGN & UI
+# 100% ORIGINAL DESIGN & UI WITH SYNCED DASHBOARD
 # ====================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -379,9 +365,9 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 <footer><p>© 2026 NeoHost — Universal Multi-Hosting Cloud.</p></footer>
 
 <script>
-const bots = [];
 let activeBotId = null;
 let logPollTimer = null;
+let botsSyncTimer = null;
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
@@ -428,10 +414,9 @@ function uploadUniversalFiles(files) {
   .then(data => {
     if (data.status === 'success') {
       data.bots.forEach(b => {
-        bots.push(b);
         log(`Service <b>${b.name}</b> deployed & executed! ID: ${b.id}`, 'success');
       });
-      renderBots();
+      syncActiveBots();
       if (data.bots.length > 0) {
         activeBotId = data.bots[data.bots.length - 1].id;
         startLogPolling();
@@ -442,32 +427,44 @@ function uploadUniversalFiles(files) {
   });
 }
 
-function renderBots() {
-  botCount.textContent = bots.length;
-  botsList.querySelectorAll('.bot-item').forEach(n => n.remove());
-  if (bots.length === 0) { emptyState.style.display = 'block'; return; }
-  emptyState.style.display = 'none';
+function syncActiveBots() {
+  fetch('/api/active-bots')
+  .then(res => res.json())
+  .then(data => {
+    const serverBots = data.bots || [];
+    botCount.textContent = serverBots.length;
+    botsList.querySelectorAll('.bot-item').forEach(n => n.remove());
+    
+    if (serverBots.length === 0) {
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
 
-  bots.forEach(bot => {
-    const item = document.createElement('div');
-    item.className = 'bot-item';
-    item.innerHTML = `
-      <div class="bot-icon">${bot.name.charAt(0).toUpperCase()}</div>
-      <div class="bot-info">
-        <div class="bot-name">${bot.name}</div>
-        <div class="bot-meta"><span class="status-pill running"><span class="led"></span>RUNNING</span></div>
-      </div>
-      <button class="icon-btn" onclick="stopBot('${bot.id}')">⏹</button>
-    `;
-    botsList.appendChild(item);
+    serverBots.forEach(bot => {
+      const item = document.createElement('div');
+      item.className = 'bot-item';
+      item.innerHTML = `
+        <div class="bot-icon">${bot.name.charAt(0).toUpperCase()}</div>
+        <div class="bot-info">
+          <div class="bot-name">${bot.name}</div>
+          <div class="bot-meta"><span class="status-pill running"><span class="led"></span>RUNNING</span></div>
+        </div>
+        <button class="icon-btn" onclick="stopBot('${bot.id}')">⏹</button>
+      `;
+      botsList.appendChild(item);
+    });
+
+    if (!activeBotId && serverBots.length > 0) {
+      activeBotId = serverBots[0].id;
+      startLogPolling();
+    }
   });
 }
 
 function stopBot(id) {
   fetch(`/api/stop/${id}`, { method: 'POST' }).then(() => {
-    const idx = bots.findIndex(b => b.id === id);
-    if (idx !== -1) bots.splice(idx, 1);
-    renderBots();
+    syncActiveBots();
     log(`Service terminated.`, 'sys');
   });
 }
@@ -486,6 +483,10 @@ function startLogPolling() {
     });
   }, 2500);
 }
+
+// Auto sync active bots list every 3 seconds
+setInterval(syncActiveBots, 3000);
+window.onload = syncActiveBots;
 </script>
 </body>
 </html>
@@ -529,6 +530,11 @@ def deploy_universal():
         
     return jsonify({"status": "success", "bots": deployed_response})
 
+@app.route("/api/active-bots")
+def get_active_bots():
+    bots_list = [{"id": bid, "name": info["name"]} for bid, info in active_bots.items() if info["process"].poll() is None]
+    return jsonify({"bots": bots_list})
+
 @app.route("/api/logs/<bot_id>")
 def get_logs(bot_id):
     return jsonify({"logs": bot_logs.get(bot_id, [])})
@@ -537,7 +543,7 @@ def get_logs(bot_id):
 def stop_bot(bot_id):
     if bot_id in active_bots:
         try:
-            active_bots[bot_id].terminate()
+            active_bots[bot_id]["process"].terminate()
             del active_bots[bot_id]
         except:
             pass
