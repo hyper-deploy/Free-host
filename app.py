@@ -48,7 +48,7 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
                     elif f.endswith('.php'):
                         filename = f; file_ext = '.php'; found = True; break
                 if not found:
-                    bot_logs[bot_id].append("Error: No executable entry point (.py, .js, .php) found in ZIP.")
+                    bot_logs[bot_id].append("Error: No executable entry point found in ZIP.")
                     return
 
         file_path = os.path.join(target_dir, filename)
@@ -126,7 +126,7 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
 
 
 # ====================================================
-# 100% ORIGINAL DESIGN & UI WITH SYNCED DASHBOARD
+# 100% ORIGINAL DESIGN & UI WITH FIXED DASHBOARD SYNC
 # ====================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -367,7 +367,6 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 <script>
 let activeBotId = null;
 let logPollTimer = null;
-let botsSyncTimer = null;
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
@@ -389,7 +388,12 @@ function log(msg, type = 'sys', source = 'neohost') {
 function clearConsole() { consoleBody.innerHTML = ''; log('Console cleared.', 'sys'); }
 
 dropzone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => { if (e.target.files.length) uploadUniversalFiles(e.target.files); });
+fileInput.addEventListener('change', e => { 
+  if (e.target.files.length) {
+    uploadUniversalFiles(e.target.files);
+    fileInput.value = ''; // Reset file input so same file can be uploaded again if needed
+  } 
+});
 
 function uploadUniversalFiles(files) {
   const formData = new FormData();
@@ -424,6 +428,9 @@ function uploadUniversalFiles(files) {
     } else {
       log(`Deployment failed: ${data.message}`, 'sys');
     }
+  })
+  .catch(err => {
+    log(`Upload Network Error: ${err}`, 'sys');
   });
 }
 
@@ -459,11 +466,13 @@ function syncActiveBots() {
       activeBotId = serverBots[0].id;
       startLogPolling();
     }
-  });
+  })
+  .catch(err => console.error("Sync error:", err));
 }
 
 function stopBot(id) {
-  fetch(`/api/stop/${id}`, { method: 'POST' }).then(() => {
+  fetch(`/api/stop/${id}`, { method: 'POST' })
+  .then(() => {
     syncActiveBots();
     log(`Service terminated.`, 'sys');
   });
@@ -480,7 +489,8 @@ function startLogPolling() {
         consoleBody.innerHTML = '';
         data.logs.forEach(l => log(l, 'success', 'service'));
       }
-    });
+    })
+    .catch(err => {});
   }, 2500);
 }
 
@@ -532,8 +542,14 @@ def deploy_universal():
 
 @app.route("/api/active-bots")
 def get_active_bots():
-    bots_list = [{"id": bid, "name": info["name"]} for bid, info in active_bots.items() if info["process"].poll() is None]
-    return jsonify({"bots": bots_list})
+    # Keep only bots whose processes are still running
+    running_list = []
+    for bid, info in list(active_bots.items()):
+        if info["process"].poll() is None:
+            running_list.append({"id": bid, "name": info["name"]})
+        else:
+            active_bots.pop(bid, None)
+    return jsonify({"bots": running_list})
 
 @app.route("/api/logs/<bot_id>")
 def get_logs(bot_id):
@@ -544,9 +560,14 @@ def stop_bot(bot_id):
     if bot_id in active_bots:
         try:
             active_bots[bot_id]["process"].terminate()
-            del active_bots[bot_id]
+            active_bots[bot_id]["process"].wait(timeout=2)
         except:
-            pass
+            try:
+                active_bots[bot_id]["process"].kill()
+            except:
+                pass
+        finally:
+            active_bots.pop(bot_id, None)
     return jsonify({"status": "stopped"})
 
 if __name__ == "__main__":
