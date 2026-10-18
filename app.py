@@ -11,13 +11,12 @@ bot_logs = {}
 
 def install_and_run_bot(bot_id, file_path):
     """Scans any imports, installs missing packages dynamically, and runs the bot"""
-    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script for any modules/libraries..."]
+    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script for modules/libraries..."]
     
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             code_content = f.read()
             
-        # Comprehensive map of all popular python modules to pip packages
         module_to_pkg = {
             "telegram": "python-telegram-bot",
             "telebot": "pyTelegramBotAPI",
@@ -32,11 +31,7 @@ def install_and_run_bot(bot_id, file_path):
             "PIL": "Pillow",
             "openai": "openai",
             "gtts": "gtts",
-            "psutil": "psutil",
-            "feedparser": "feedparser",
-            "dotenv": "python-dotenv",
-            "cryptography": "cryptography",
-            "jwt": "PyJWT"
+            "psutil": "psutil"
         }
         
         detected_pkgs = []
@@ -50,7 +45,7 @@ def install_and_run_bot(bot_id, file_path):
         if detected_pkgs:
             bot_logs[bot_id].append(f"Installing detected packages: {', '.join(detected_pkgs)}...")
             subprocess.run(["pip", "install"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("All packages ready ✓")
+            bot_logs[bot_id].append("All packages installed ✓")
             
         bot_logs[bot_id].append("Launching bot process...")
         
@@ -267,7 +262,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 <section id="deploy">
   <span class="section-tag">// deploy zone</span>
   <h2 class="section-title">Upload your <span style="color:var(--cyan)">.py</span> bot</h2>
-  <p class="section-sub">Drop any Telegram bot script below to execute it live on the server with universal library support.</p>
+  <p class="section-sub">Drop any Telegram bot script below to execute it live on the server.</p>
   <div class="deploy-wrap">
     <div class="dropzone" id="dropzone">
       <div class="dz-icon">📦</div>
@@ -278,8 +273,8 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
     <div class="deploy-side">
       <h4>✅ Universal Runtime Checklist</h4>
       <ul>
-        <li><span class="check">✓</span> Supports python-telegram-bot, pyrogram, aiogram, telebot</li>
-        <li><span class="check">✓</span> Auto-installs any required Python module</li>
+        <li><span class="check">✓</span> Auto-installs python-telegram-bot & all modules</li>
+        <li><span class="check">✓</span> Uses `os.environ` for tokens</li>
         <li><span class="check">✓</span> Real-time stdout console logs active</li>
       </ul>
     </div>
@@ -347,7 +342,7 @@ function uploadAndRun(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  log(`Uploading ${file.name} with universal dependency scan...`, 'sys');
+  log(`Uploading ${file.name} and installing packages...`, 'sys');
   fetch('/api/deploy', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
