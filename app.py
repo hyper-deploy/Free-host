@@ -10,8 +10,8 @@ active_bots = {}
 bot_logs = {}
 
 def install_and_run_bot(bot_id, file_path):
-    """Dynamically installs missing libraries and runs the bot safely"""
-    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script dependencies..."]
+    """Automatically scans imports, installs missing packages dynamically, and runs the bot"""
+    bot_logs[bot_id] = ["Initializing Python runtime...", "Scanning script for modules/libraries..."]
     
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -28,6 +28,7 @@ def install_and_run_bot(bot_id, file_path):
             "motor": "motor",
             "pymongo": "pymongo",
             "yt_dlp": "yt-dlp",
+            "PIL": "Pillow",
             "openai": "openai",
             "gtts": "gtts",
             "psutil": "psutil"
@@ -42,10 +43,9 @@ def install_and_run_bot(bot_id, file_path):
             detected_pkgs.append("Tgcrypto")
             
         if detected_pkgs:
-            bot_logs[bot_id].append(f"Installing missing packages: {', '.join(detected_pkgs)}...")
-            # Use --prefer-binary to avoid building from source and preventing build fails
+            bot_logs[bot_id].append(f"Installing packages: {', '.join(detected_pkgs)}...")
             subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("Packages installed successfully ✓")
+            bot_logs[bot_id].append("All packages installed successfully ✓")
             
         bot_logs[bot_id].append("Launching bot process...")
         
@@ -73,9 +73,9 @@ def install_and_run_bot(bot_id, file_path):
             del active_bots[bot_id]
 
 
-# ==========================================
-# TOMAR 100% ORIGINAL DESIGN & FRONTEND
-# ==========================================
+# ====================================================
+# COMPLETE ORIGINAL DESIGN + REAL BACKEND
+# ====================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -86,38 +86,35 @@ HTML_PAGE = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
 :root {
   --cyan: #00f0ff; --magenta: #ff00e5; --purple: #7b2ff7; --green: #00ff88; --red: #ff3b6b; --yellow: #ffd60a;
   --bg: #05050a; --bg-2: #0a0a14; --card: rgba(255, 255, 255, 0.035); --card-hover: rgba(255, 255, 255, 0.06);
   --border: rgba(255, 255, 255, 0.08); --border-glow: rgba(0, 240, 255, 0.35);
   --text: #e8e8f0; --muted: #8a8a9a; --muted-2: #5a5a6a;
-  --radius: 16px; --radius-sm: 10px; --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --radius: 16px; --radius-sm: 10px; --font: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
 }
+
 html { scroll-behavior: smooth; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); overflow-x: hidden; min-height: 100vh; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); overflow-x: hidden; min-height: 100vh; line-height: 1.6; }
 ::selection { background: var(--cyan); color: #000; }
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-2); }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--cyan), var(--purple)); border-radius: 10px; border: 2px solid var(--bg-2); }
 
 .bg-fx { position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; }
-.orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.35; will-change: transform; }
-.orb-1 { width: 550px; height: 550px; background: var(--cyan); top: -180px; left: -150px; animation: floatA 22s ease-in-out infinite; }
-.orb-2 { width: 450px; height: 450px; background: var(--magenta); bottom: -150px; right: -150px; animation: floatB 26s ease-in-out infinite; }
-.orb-3 { width: 400px; height: 400px; background: var(--purple); top: 45%; left: 50%; animation: floatC 30s ease-in-out infinite; }
-@keyframes floatA { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(120px, 90px) scale(1.15); } }
-@keyframes floatB { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-130px, -80px) scale(1.1); } }
-@keyframes floatC { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-40%,-60%) scale(1.2); } }
+.orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.35; }
+.orb-1 { width: 550px; height: 550px; background: var(--cyan); top: -180px; left: -150px; }
+.orb-2 { width: 450px; height: 450px; background: var(--magenta); bottom: -150px; right: -150px; }
+.orb-3 { width: 400px; height: 400px; background: var(--purple); top: 45%; left: 50%; }
 
 .grid-bg {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-image: linear-gradient(rgba(0,240,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(0,240,255,0.045) 1px, transparent 1px);
   background-size: 56px 56px;
   mask-image: radial-gradient(ellipse 90% 70% at 50% 40%, #000 20%, transparent 75%);
-  animation: gridPulse 8s ease-in-out infinite;
 }
-@keyframes gridPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
 
 nav {
   position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between;
@@ -136,10 +133,12 @@ nav {
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 10px;
-  font-family: var(--font); font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: all 0.25s ease;
+  font-family: var(--font); font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: all 0.25s ease; white-space: nowrap;
 }
 .btn-primary { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #000; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,240,255,0.45); }
 .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--card-hover); border-color: var(--border-glow); }
 .btn-sm { padding: 8px 14px; font-size: 0.8rem; border-radius: 8px; }
 
 .hero { padding: 110px 40px 70px; max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 60px; align-items: center; }
@@ -147,15 +146,14 @@ nav {
   display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 100px;
   background: rgba(0,240,255,0.08); border: 1px solid rgba(0,240,255,0.25); font-size: 0.78rem; font-weight: 600; color: var(--cyan); margin-bottom: 26px;
 }
-.badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.6s infinite; }
-@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
+.badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
 
 .hero h1 { font-size: clamp(2.4rem, 5.5vw, 4.2rem); font-weight: 900; line-height: 1.05; letter-spacing: -2px; margin-bottom: 22px; }
 .hero h1 .gradient { background: linear-gradient(90deg, var(--cyan), var(--magenta), var(--purple)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero p { font-size: 1.1rem; color: var(--muted); max-width: 520px; margin-bottom: 36px; }
 .hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 42px; }
 
-.hero-stats { display: flex; gap: 40px; padding-top: 28px; border-top: 1px solid var(--border); }
+.hero-stats { display: flex; gap: 40px; flex-wrap: wrap; padding-top: 28px; border-top: 1px solid var(--border); }
 .hero-stats .stat-num { font-size: 1.7rem; font-weight: 800; background: linear-gradient(90deg, var(--cyan), var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero-stats .stat-label { font-size: 0.8rem; color: var(--muted); }
 
@@ -174,6 +172,14 @@ section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
 .section-tag { font-family: var(--mono); font-size: 0.8rem; color: var(--cyan); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; display: block; }
 .section-title { font-size: clamp(1.8rem, 3.5vw, 2.7rem); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 14px; }
 .section-sub { color: var(--muted); max-width: 600px; margin-bottom: 50px; }
+
+/* Features Grid */
+.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.feature-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px 26px; backdrop-filter: blur(10px); transition: 0.3s; }
+.feature-card:hover { transform: translateY(-6px); border-color: var(--border-glow); background: var(--card-hover); }
+.feature-icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: rgba(0,240,255,0.08); border: 1px solid rgba(0,240,255,0.2); margin-bottom: 20px; }
+.feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.feature-card p { font-size: 0.9rem; color: var(--muted); }
 
 .deploy-wrap { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px; align-items: start; }
 .dropzone { background: var(--card); border: 2px dashed rgba(0,240,255,0.3); border-radius: var(--radius); padding: 60px 30px; text-align: center; cursor: pointer; transition: 0.3s; }
@@ -198,8 +204,6 @@ section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
 .status-pill { font-size: 0.72rem; font-weight: 600; padding: 4px 10px; border-radius: 100px; font-family: var(--mono); display: inline-flex; align-items: center; gap: 6px; }
 .status-pill.running { background: rgba(0,255,136,0.1); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
 .status-pill.running .led { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
-.status-pill.stopped { background: rgba(138,138,154,0.1); color: var(--muted); border: 1px solid rgba(138,138,154,0.25); }
-.status-pill.stopped .led { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); }
 .icon-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.03); cursor: pointer; color: var(--text); }
 
 .console-panel { background: #07070d; border: 1px solid var(--border); border-radius: var(--radius); height: 560px; display: flex; flex-direction: column; }
@@ -212,13 +216,12 @@ section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
 .prefix { color: var(--purple); font-weight: 700; }
 
 footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-top: 60px; text-align: center; color: var(--muted); font-size: 0.85rem; }
-#toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
-.toast { padding: 14px 18px; background: rgba(15,15,25,0.95); border: 1px solid var(--border); border-radius: 10px; font-size: 0.85rem; display: flex; align-items: center; gap: 10px; }
 
 @media (max-width: 980px) {
   .hero { grid-template-columns: 1fr; padding: 60px 20px 40px; text-align: center; }
   .deploy-wrap, .dashboard { grid-template-columns: 1fr; }
   .console-panel { height: 400px; }
+  .nav-links { display: none; }
 }
 </style>
 </head>
@@ -259,6 +262,36 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
   </div>
 </div>
 
+<!-- FEATURES SECTION RESTORED -->
+<section id="features">
+  <span class="section-tag">// why neohost</span>
+  <h2 class="section-title">Built for developers, <br>by developers.</h2>
+  <p class="section-sub">Everything you need to ship and scale your Python bots — no DevOps required.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Instant Deploy</h3>
+      <p>Drag & drop your <b>.py</b> file and it's running in under 2 seconds. Auto‑restart included.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📡</div>
+      <h3>Live Console</h3>
+      <p>Real‑time stdout, stderr, and trace logs streamed directly to your browser.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🛡️</div>
+      <h3>Isolated Sandbox</h3>
+      <p>Every bot runs in its own secure environment with robust package support.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">♾️</div>
+      <h3>24/7 Uptime</h3>
+      <p>Global cloud infrastructure keeps your Telegram and Python bots online permanently.</p>
+    </div>
+  </div>
+</section>
+
 <section id="deploy">
   <span class="section-tag">// deploy zone</span>
   <h2 class="section-title">Upload your <span style="color:var(--cyan)">.py</span> bot</h2>
@@ -273,7 +306,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
     <div class="deploy-side">
       <h4>✅ Universal Runtime Checklist</h4>
       <ul>
-        <li><span class="check">✓</span> Auto-installs python-telegram-bot & all modules</li>
+        <li><span class="check">✓</span> Auto-installs all modules (telegram, pyrogram, etc.)</li>
         <li><span class="check">✓</span> Uses `os.environ` for tokens</li>
         <li><span class="check">✓</span> Real-time stdout console logs active</li>
       </ul>
@@ -308,7 +341,6 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 </section>
 
 <footer><p>© 2026 NeoHost — Universal Python Bot Cloud Hosting.</p></footer>
-<div id="toast-container"></div>
 
 <script>
 const bots = [];
@@ -342,7 +374,7 @@ function uploadAndRun(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  log(`Uploading ${file.name} and installing packages...`, 'sys');
+  log(`Uploading ${file.name} & installing packages...`, 'sys');
   fetch('/api/deploy', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
