@@ -15,4 +15,3 @@ Pillow==10.2.0
 openai==1.14.1
 gtts==2.5.1
 psutil==5.9.8
-urllib3==2.2.1
