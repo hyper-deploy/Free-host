@@ -16,6 +16,7 @@ bot_logs = {}
 def universal_runtime_runner(bot_id, bot_dir, filename):
     """Universal executor supporting Python, Node.js, PHP, and ZIP projects"""
     bot_logs[bot_id] = [f"Initializing universal runtime for {filename}..."]
+    active_bots[bot_id]["status"] = "installing"
     
     try:
         file_ext = os.path.splitext(filename)[1].lower()
@@ -49,6 +50,7 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
                         filename = f; file_ext = '.php'; found = True; break
                 if not found:
                     bot_logs[bot_id].append("Error: No executable entry point found in ZIP.")
+                    active_bots[bot_id]["status"] = "failed"
                     return
 
         file_path = os.path.join(target_dir, filename)
@@ -68,7 +70,7 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
                 "aiohttp": "aiohttp",
                 "motor": "motor",
                 "pymongo": "pymongo",
-                "yt_dlp": "yt_dlp",
+                "yt_dlp": "yt-dlp",
                 "PIL": "Pillow",
                 "openai": "openai",
                 "gtts": "gtts",
@@ -96,6 +98,7 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
 
         else:
             bot_logs[bot_id].append(f"Unsupported file extension: {file_ext}")
+            active_bots[bot_id]["status"] = "failed"
             return
 
         env = os.environ.copy()
@@ -108,7 +111,8 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
             text=True,
             bufsize=1
         )
-        active_bots[bot_id] = {"process": process, "name": filename}
+        active_bots[bot_id]["process"] = process
+        active_bots[bot_id]["status"] = "running"
         bot_logs[bot_id].append("Process is now LIVE ✓")
         
         for line in process.stdout:
@@ -120,13 +124,14 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
                     
     except Exception as e:
         bot_logs[bot_id].append(f"Execution Error: {str(e)}")
+        active_bots[bot_id]["status"] = "failed"
     finally:
-        if bot_id in active_bots and active_bots[bot_id]["process"].poll() is not None:
-            del active_bots[bot_id]
+        if bot_id in active_bots and active_bots[bot_id].get("process") and active_bots[bot_id]["process"].poll() is not None:
+            active_bots[bot_id]["status"] = "stopped"
 
 
 # ====================================================
-# 100% ORIGINAL DESIGN & UI WITH FIXED DASHBOARD SYNC
+# 100% ORIGINAL DESIGN & UI WITH REFRESH BUTTON
 # ====================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -237,6 +242,8 @@ section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
 .status-pill { font-size: 0.72rem; font-weight: 600; padding: 4px 10px; border-radius: 100px; font-family: var(--mono); display: inline-flex; align-items: center; gap: 6px; }
 .status-pill.running { background: rgba(0,255,136,0.1); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
 .status-pill.running .led { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status-pill.installing { background: rgba(255,214,10,0.1); color: var(--yellow); border: 1px solid rgba(255,214,10,0.3); }
+.status-pill.installing .led { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
 .icon-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.03); cursor: pointer; color: var(--text); }
 
 .console-panel { background: #07070d; border: 1px solid var(--border); border-radius: var(--radius); height: 560px; display: flex; flex-direction: column; }
@@ -285,35 +292,6 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
   </div>
 </div>
 
-<section id="features">
-  <span class="section-tag">// universal multi-hosting</span>
-  <h2 class="section-title">All-in-One Cloud Engine.</h2>
-  <p class="section-sub">Support for all major backend and script runtimes with automated package handling.</p>
-
-  <div class="features-grid">
-    <div class="feature-card">
-      <div class="feature-icon">🐍</div>
-      <h3>Python Bots (.py)</h3>
-      <p>Auto-scans imports and installs dependencies seamlessly for Telegram and custom bots.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🌐</div>
-      <h3>PHP Servers (.php)</h3>
-      <p>Hosts PHP scripts and web panels live using built-in high performance servers.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">⚡</div>
-      <h3>Node.js Apps (.js)</h3>
-      <p>Supports Node scripts with automatic package.json and npm installation.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">📦</div>
-      <h3>ZIP Archives (.zip)</h3>
-      <p>Upload full project folders compressed — auto extracts and boots the entry point.</p>
-    </div>
-  </div>
-</section>
-
 <section id="deploy">
   <span class="section-tag">// universal deploy zone</span>
   <h2 class="section-title">Upload your <span style="color:var(--cyan)">project files</span></h2>
@@ -343,6 +321,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
     <div class="bots-panel">
       <div class="panel-head">
         <h3>🤖 Active Services <span class="count-badge" id="botCount">0</span></h3>
+        <button class="btn btn-ghost btn-sm" onclick="syncActiveBots()">🔄 Refresh</button>
       </div>
       <div class="bots-list" id="botsList">
         <div class="empty-state" id="emptyState">
@@ -391,7 +370,7 @@ dropzone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => { 
   if (e.target.files.length) {
     uploadUniversalFiles(e.target.files);
-    fileInput.value = ''; // Reset file input so same file can be uploaded again if needed
+    fileInput.value = '';
   } 
 });
 
@@ -418,9 +397,9 @@ function uploadUniversalFiles(files) {
   .then(data => {
     if (data.status === 'success') {
       data.bots.forEach(b => {
-        log(`Service <b>${b.name}</b> deployed & executed! ID: ${b.id}`, 'success');
+        log(`Service <b>${b.name}</b> deploying & installing dependencies... ID: ${b.id}`, 'success');
       });
-      syncActiveBots();
+      setTimeout(syncActiveBots, 500);
       if (data.bots.length > 0) {
         activeBotId = data.bots[data.bots.length - 1].id;
         startLogPolling();
@@ -449,13 +428,17 @@ function syncActiveBots() {
     emptyState.style.display = 'none';
 
     serverBots.forEach(bot => {
+      const isRunning = bot.status === 'running';
+      const statusText = isRunning ? 'RUNNING' : 'INSTALLING';
+      const statusClass = isRunning ? 'running' : 'installing';
+      
       const item = document.createElement('div');
       item.className = 'bot-item';
       item.innerHTML = `
         <div class="bot-icon">${bot.name.charAt(0).toUpperCase()}</div>
         <div class="bot-info">
           <div class="bot-name">${bot.name}</div>
-          <div class="bot-meta"><span class="status-pill running"><span class="led"></span>RUNNING</span></div>
+          <div class="bot-meta"><span class="status-pill ${statusClass}"><span class="led"></span>${statusText}</span></div>
         </div>
         <button class="icon-btn" onclick="stopBot('${bot.id}')">⏹</button>
       `;
@@ -494,7 +477,6 @@ function startLogPolling() {
   }, 2500);
 }
 
-// Auto sync active bots list every 3 seconds
 setInterval(syncActiveBots, 3000);
 window.onload = syncActiveBots;
 </script>
@@ -533,6 +515,8 @@ def deploy_universal():
         bot_id = "srv_" + os.urandom(4).hex()
         bot_logs[bot_id] = [f"Spawning runtime for {filename}..."]
         
+        active_bots[bot_id] = {"process": None, "name": filename, "status": "installing"}
+        
         t = threading.Thread(target=universal_runtime_runner, args=(bot_id, bot_dir, filename), daemon=True)
         t.start()
         
@@ -542,13 +526,14 @@ def deploy_universal():
 
 @app.route("/api/active-bots")
 def get_active_bots():
-    # Keep only bots whose processes are still running
     running_list = []
     for bid, info in list(active_bots.items()):
-        if info["process"].poll() is None:
-            running_list.append({"id": bid, "name": info["name"]})
-        else:
+        status = info.get("status", "running")
+        proc = info.get("process")
+        if proc is not None and proc.poll() is not None:
             active_bots.pop(bid, None)
+            continue
+        running_list.append({"id": bid, "name": info["name"], "status": status})
     return jsonify({"bots": running_list})
 
 @app.route("/api/logs/<bot_id>")
@@ -559,11 +544,13 @@ def get_logs(bot_id):
 def stop_bot(bot_id):
     if bot_id in active_bots:
         try:
-            active_bots[bot_id]["process"].terminate()
-            active_bots[bot_id]["process"].wait(timeout=2)
+            proc = active_bots[bot_id].get("process")
+            if proc:
+                proc.terminate()
+                proc.wait(timeout=2)
         except:
             try:
-                active_bots[bot_id]["process"].kill()
+                proc.kill()
             except:
                 pass
         finally:
