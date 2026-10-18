@@ -13,7 +13,7 @@ def run_background_bot():
     Tomar GitHub repository-te jodi kono independent python bot file thake 
     (jemon bot.py ba main.py), tahole eta background-e real-time run korbe.
     """
-    bot_filename = "bot.py"  # Tomar bot-er file-er nam ekhane dite paro
+    bot_filename = "bot.py"  # Tomar bot-er file-er nam ekhane thakbe
     if os.path.exists(bot_filename):
         print(f"Starting background bot worker: {bot_filename}")
         while True:
@@ -30,7 +30,7 @@ def run_background_bot():
             except Exception as e:
                 print(f"Bot execution error: {e}")
     else:
-        print("Web server is running normally. Add a bot file if needed.")
+        print("Web server is running normally. Add a 'bot.py' file to run your Telegram bot.")
 
 # Start bot thread in background
 bot_thread = threading.Thread(target=run_background_bot, daemon=True)
@@ -493,7 +493,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 <span class="ln">7</span>&nbsp;&nbsp;prefix=<span class="str">"!"</span><br>
 <span class="ln">8</span>)<br>
 <span class="ln">9</span><br>
-<span class="ln">10</span><span class="kw">@bot</span>.command(<span class="str">"ping"</span>)<br>
+<span class="ln">10</span><span class="kw>@bot</span>.command(<span class="str">"ping"</span>)<br>
 <span class="ln">11</span><span class="kw">async def</span> <span class="fn">ping</span>(ctx):<br>
 <span class="ln">12</span>&nbsp;&nbsp;<span class="kw">await</span> ctx.send(<span class="str">"🏓 Pong!"</span>)<br>
 <span class="ln">13</span><br>
@@ -588,7 +588,7 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
       <div class="console-body" id="consoleBody">
         <div class="console-line sys">
           <span class="time">--:--:--</span>
-          <span class="msg"><span class="prefix">neohost</span> › Welcome to the live runtime. Deploy a bot to see logs.</span>
+          <span class="msg"><span class="prefix">neohost</span> › Welcome to the live runtime. Bot background worker ready.</span>
         </div>
       </div>
     </div>
