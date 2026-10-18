@@ -2,63 +2,120 @@ import os
 import subprocess
 import threading
 import re
+import zipfile
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
-UPLOAD_FOLDER = "/tmp/neohost_bots"
+UPLOAD_FOLDER = "/tmp/neohost_cluster"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 active_bots = {}
 bot_logs = {}
 
-def install_and_run_bot(bot_id, bot_dir, main_filename):
-    """Automatically cleans conflicting sessions and executes the bot"""
-    bot_logs[bot_id] = [f"Preparing multi-host environment for {main_filename}..."]
+def universal_runtime_runner(bot_id, bot_dir, filename):
+    """Universal executor supporting Python, Node.js, PHP, and ZIP projects"""
+    bot_logs[bot_id] = [f"Initializing universal runtime for {filename}..."]
     
     try:
-        main_file_path = os.path.join(bot_dir, main_filename)
+        file_ext = os.path.splitext(filename)[1].lower()
+        target_dir = bot_dir
         
-        with open(main_file_path, "r", encoding="utf-8") as f:
-            code_content = f.read()
+        # Handle ZIP Archives
+        if file_ext == '.zip':
+            bot_logs[bot_id].append("Extracting ZIP archive...")
+            zip_path = os.path.join(bot_dir, filename)
+            extract_dir = os.path.join(bot_dir, "extracted_" + bot_id)
+            os.makedirs(extract_dir, exist_ok=True)
             
-        module_to_pkg = {
-            "telegram": "python-telegram-bot",
-            "telebot": "pyTelegramBotAPI",
-            "pyrogram": "pyrogram",
-            "aiogram": "aiogram",
-            "requests": "requests",
-            "bs4": "beautifulsoup4",
-            "aiohttp": "aiohttp",
-            "motor": "motor",
-            "pymongo": "pymongo",
-            "yt_dlp": "yt-dlp",
-            "PIL": "Pillow",
-            "openai": "openai",
-            "gtts": "gtts",
-            "psutil": "psutil"
-        }
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            target_dir = extract_dir
+            # Look for main entry files inside extracted folder
+            files_in_ext = os.listdir(target_dir)
+            if 'main.py' in files_in_ext:
+                filename = 'main.py'
+                file_ext = '.py'
+            elif 'index.js' in files_in_ext:
+                filename = 'index.js'
+                file_ext = '.js'
+            elif 'index.php' in files_in_ext:
+                filename = 'index.php'
+                file_ext = '.php'
+            else:
+                # Find first python or js file
+                found = False
+                for f in files_in_ext:
+                    if f.endswith('.py'):
+                        filename = f; file_ext = '.py'; found = True; break
+                    elif f.endswith('.js'):
+                        filename = f; file_ext = '.js'; found = True; break
+                    elif f.endswith('.php'):
+                        filename = f; file_ext = '.php'; found = True; break
+                if not found:
+                    bot_logs[bot_id].append("Error: No executable entry point (.py, .js, .php) found in ZIP.")
+                    return
+
+        file_path = os.path.join(target_dir, filename)
         
-        detected_pkgs = []
-        for mod, pkg in module_to_pkg.items():
-            if re.search(r'\b(import|from)\s+' + mod + r'\b', code_content):
-                detected_pkgs.append(pkg)
+        # 1. PYTHON RUNTIME (.py)
+        if file_ext == '.py':
+            bot_logs[bot_id].append("Scanning Python script dependencies...")
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                code = f.read()
                 
-        if "pyrogram" in detected_pkgs and "Tgcrypto" not in detected_pkgs:
-            detected_pkgs.append("Tgcrypto")
-            
-        if detected_pkgs:
-            bot_logs[bot_id].append(f"Installing packages: {', '.join(detected_pkgs)}...")
-            subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("Dependencies ready ✓")
-            
-        bot_logs[bot_id].append(f"Launching bot cluster process...")
-        
+            module_to_pkg = {
+                "telegram": "python-telegram-bot",
+                "telebot": "pyTelegramBotAPI",
+                "pyrogram": "pyrogram",
+                "aiogram": "aiogram",
+                "requests": "requests",
+                "bs4": "beautifulsoup4",
+                "aiohttp": "aiohttp",
+                "motor": "motor",
+                "pymongo": "pymongo",
+                "yt_dlp": "yt_dlp",
+                "PIL": "Pillow",
+                "openai": "openai",
+                "gtts": "gtts",
+                "psutil": "psutil"
+            }
+            detected = [pkg for mod, pkg in module_to_pkg.items() if re.search(r'\b(import|from)\s+' + mod + r'\b', code)]
+            if "pyrogram" in detected and "Tgcrypto" not in detected:
+                detected.append("Tgcrypto")
+                
+            if detected:
+                bot_logs[bot_id].append(f"Installing packages: {', '.join(detected)}...")
+                subprocess.run(["pip", "install", "--prefer-binary"] + detected, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                bot_logs[bot_id].append("Python packages ready ✓")
+                
+            bot_logs[bot_id].append(f"Executing Python process: {filename}...")
+            cmd = ["python", filename]
+
+        # 2. NODE.JS RUNTIME (.js)
+        elif file_ext == '.js':
+            bot_logs[bot_id].append("Checking Node.js environment & package.json...")
+            if os.path.exists(os.path.join(target_dir, "package.json")):
+                bot_logs[bot_id].append("Running npm install...")
+                subprocess.run(["npm", "install"], cwd=target_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            bot_logs[bot_id].append(f"Executing Node.js process: {filename}...")
+            cmd = ["node", filename]
+
+        # 3. PHP RUNTIME (.php)
+        elif file_ext == '.php':
+            bot_logs[bot_id].append(f"Launching PHP built-in server for {filename}...")
+            port = str(8000 + (hash(bot_id) % 1000))
+            cmd = ["php", "-S", f"0.0.0.0:{port}", filename]
+
+        else:
+            bot_logs[bot_id].append(f"Unsupported file extension: {file_ext}")
+            return
+
         env = os.environ.copy()
-        
         process = subprocess.Popen(
-            ["python", main_filename],
-            cwd=bot_dir,
+            cmd,
+            cwd=target_dir,
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -66,13 +123,13 @@ def install_and_run_bot(bot_id, bot_dir, main_filename):
             bufsize=1
         )
         active_bots[bot_id] = process
-        bot_logs[bot_id].append("Bot process is now LIVE ✓")
+        bot_logs[bot_id].append("Process is now LIVE ✓")
         
         for line in process.stdout:
             msg = line.strip()
             if msg:
                 bot_logs[bot_id].append(msg)
-                if len(bot_logs[bot_id]) > 250:
+                if len(bot_logs[bot_id]) > 300:
                     bot_logs[bot_id].pop(0)
                     
     except Exception as e:
@@ -83,14 +140,14 @@ def install_and_run_bot(bot_id, bot_dir, main_filename):
 
 
 # ====================================================
-# 100% ORIGINAL DESIGN + MULTI-HOSTING SUPPORT
+# 100% ORIGINAL DESIGN & UI
 # ====================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NeoHost — Deploy Python Bots at Light Speed</title>
+<title>NeoHost — Universal Multi-Hosting Cloud</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -159,32 +216,17 @@ nav {
 .hero p { font-size: 1.1rem; color: var(--muted); max-width: 520px; margin-bottom: 36px; }
 .hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 42px; }
 
-.hero-stats { display: flex; gap: 40px; flex-wrap: wrap; padding-top: 28px; border-top: 1px solid var(--border); }
-.hero-stats .stat-num { font-size: 1.7rem; font-weight: 800; background: linear-gradient(90deg, var(--cyan), var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.hero-stats .stat-label { font-size: 0.8rem; color: var(--muted); }
-
-.code-window { background: linear-gradient(180deg, rgba(15,15,25,0.95), rgba(8,8,15,0.98)); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.6); }
-.code-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); }
-.code-header .dots { display: flex; gap: 6px; }
-.code-header .dots span { width: 11px; height: 11px; border-radius: 50%; }
-.code-header .dots span:nth-child(1) { background: #ff5f57; }
-.code-header .dots span:nth-child(2) { background: #febc2e; }
-.code-header .dots span:nth-child(3) { background: #28c840; }
-.code-header .filename { margin-left: 8px; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
-.code-body { padding: 22px 20px; font-family: var(--mono); font-size: 0.82rem; line-height: 1.85; }
-.kw { color: var(--magenta); } .fn { color: var(--cyan); } .str { color: var(--green); } .cm { color: var(--muted-2); }
-
-section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
-.section-tag { font-family: var(--mono); font-size: 0.8rem; color: var(--cyan); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; display: block; }
-.section-title { font-size: clamp(1.8rem, 3.5vw, 2.7rem); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 14px; }
-.section-sub { color: var(--muted); max-width: 600px; margin-bottom: 50px; }
-
 .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
 .feature-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px 26px; backdrop-filter: blur(10px); transition: 0.3s; }
 .feature-card:hover { transform: translateY(-6px); border-color: var(--border-glow); background: var(--card-hover); }
 .feature-icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: rgba(0,240,255,0.08); border: 1px solid rgba(0,240,255,0.2); margin-bottom: 20px; }
 .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
 .feature-card p { font-size: 0.9rem; color: var(--muted); }
+
+section { padding: 90px 40px; max-width: 1240px; margin: 0 auto; }
+.section-tag { font-family: var(--mono); font-size: 0.8rem; color: var(--cyan); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; display: block; }
+.section-title { font-size: clamp(1.8rem, 3.5vw, 2.7rem); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 14px; }
+.section-sub { color: var(--muted); max-width: 600px; margin-bottom: 50px; }
 
 .deploy-wrap { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px; align-items: start; }
 .dropzone { background: var(--card); border: 2px dashed rgba(0,240,255,0.3); border-radius: var(--radius); padding: 60px 30px; text-align: center; cursor: pointer; transition: 0.3s; }
@@ -247,72 +289,62 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 
 <div class="hero">
   <div>
-    <div class="badge"><span class="dot"></span> Python 3.11 · Multi-Hosting Runtime</div>
-    <h1>Deploy Multiple Bots.<br><span class="gradient">Simultaneously.</span></h1>
-    <p>Upload your python bot scripts or configuration files. Host multiple bots concurrently with live execution logs.</p>
+    <div class="badge"><span class="dot"></span> Universal Engine · Python, PHP, JS, ZIP</div>
+    <h1>Host Everything.<br><span class="gradient">Python, PHP, JS & ZIP.</span></h1>
+    <p>Upload any project file or archive. NeoHost automatically detects your runtime and executes it live on cloud infrastructure.</p>
     <div class="hero-cta">
-      <button class="btn btn-primary" onclick="scrollToSection('deploy')">🚀 Deploy Multi-Bots</button>
-      <button class="btn btn-ghost" onclick="scrollToSection('dashboard')">📊 View Fleet</button>
-    </div>
-  </div>
-  <div class="code-window">
-    <div class="code-header"><div class="dots"><span></span><span></span><span></span></div><div class="filename">bot.py</div></div>
-    <div class="code-body">
-      <span class="kw">import</span> os, telebot<br>
-      bot = telebot.TeleBot(os.environ[<span class="str">"TOKEN"</span>])<br>
-      <span class="kw">@bot.message_handler</span>(commands=[<span class="str">'start'</span>])<br>
-      <span class="kw">def</span> <span class="fn">start</span>(m): bot.reply_to(m, <span class="str">"Online!"</span>)<br>
-      bot.infinity_polling()
+      <button class="btn btn-primary" onclick="scrollToSection('deploy')">🚀 Deploy Universal Files</button>
+      <button class="btn btn-ghost" onclick="scrollToSection('dashboard')">📊 View Cluster</button>
     </div>
   </div>
 </div>
 
 <section id="features">
-  <span class="section-tag">// multi-hosting capability</span>
-  <h2 class="section-title">Run multiple bots <br>without limitations.</h2>
-  <p class="section-sub">Upload multiple files concurrently — each bot gets its own isolated process.</p>
+  <span class="section-tag">// universal multi-hosting</span>
+  <h2 class="section-title">All-in-One Cloud Engine.</h2>
+  <p class="section-sub">Support for all major backend and script runtimes with automated package handling.</p>
 
   <div class="features-grid">
     <div class="feature-card">
-      <div class="feature-icon">📂</div>
-      <h3>Multi-File Upload</h3>
-      <p>Select and send multiple .py files or custom configuration scripts at once.</p>
+      <div class="feature-icon">🐍</div>
+      <h3>Python Bots (.py)</h3>
+      <p>Auto-scans imports and installs dependencies seamlessly for Telegram and custom bots.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌐</div>
+      <h3>PHP Servers (.php)</h3>
+      <p>Hosts PHP scripts and web panels live using built-in high performance servers.</p>
     </div>
     <div class="feature-card">
       <div class="feature-icon">⚡</div>
-      <h3>Simultaneous Run</h3>
-      <p>Host several Telegram bots concurrently without interrupting each other.</p>
+      <h3>Node.js Apps (.js)</h3>
+      <p>Supports Node scripts with automatic package.json and npm installation.</p>
     </div>
     <div class="feature-card">
-      <div class="feature-icon">📡</div>
-      <h3>Real-Time Logs</h3>
-      <p>Stream live stdout and debugging traces directly to your console.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">♾️</div>
-      <h3>24/7 Cloud Power</h3>
-      <p>Keep your bot cluster permanently online with zero downtime.</p>
+      <div class="feature-icon">📦</div>
+      <h3>ZIP Archives (.zip)</h3>
+      <p>Upload full project folders compressed — auto extracts and boots the entry point.</p>
     </div>
   </div>
 </section>
 
 <section id="deploy">
-  <span class="section-tag">// multi-deploy zone</span>
-  <h2 class="section-title">Upload your <span style="color:var(--cyan)">bot files</span></h2>
-  <p class="section-sub">Select multiple files (or drag & drop them) to host and run them simultaneously.</p>
+  <span class="section-tag">// universal deploy zone</span>
+  <h2 class="section-title">Upload your <span style="color:var(--cyan)">project files</span></h2>
+  <p class="section-sub">Select multiple files or zip archives to host them concurrently.</p>
   <div class="deploy-wrap">
     <div class="dropzone" id="dropzone">
       <div class="dz-icon">📦</div>
-      <h3>Drop your <code style="color:var(--cyan)">.py</code> files here</h3>
-      <p>or click to select multiple files</p>
-      <input type="file" id="fileInput" accept=".py,.txt,.env" multiple hidden />
+      <h3>Drop your <code style="color:var(--cyan)">.py, .php, .js, .zip</code> here</h3>
+      <p>or click to select files</p>
+      <input type="file" id="fileInput" accept=".py,.php,.js,.zip,.txt,.env" multiple hidden />
     </div>
     <div class="deploy-side">
-      <h4>✅ Multi-Hosting Checklist</h4>
+      <h4>✅ Universal Checklist</h4>
       <ul>
-        <li><span class="check">✓</span> Select multiple .py files together</li>
-        <li><span class="check">✓</span> Auto-installs required python libraries</li>
-        <li><span class="check">✓</span> Individual stop and monitor controls</li>
+        <li><span class="check">✓</span> Python, PHP, JS & ZIP supported</li>
+        <li><span class="check">✓</span> Auto package and module installer</li>
+        <li><span class="check">✓</span> Live real-time stream logs</li>
       </ul>
     </div>
   </div>
@@ -320,15 +352,15 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
 
 <section id="dashboard">
   <span class="section-tag">// dashboard</span>
-  <h2 class="section-title">Your bot cluster</h2>
+  <h2 class="section-title">Active cluster fleet</h2>
   <div class="dashboard">
     <div class="bots-panel">
       <div class="panel-head">
-        <h3>🤖 Active Cluster <span class="count-badge" id="botCount">0</span></h3>
+        <h3>🤖 Active Services <span class="count-badge" id="botCount">0</span></h3>
       </div>
       <div class="bots-list" id="botsList">
         <div class="empty-state" id="emptyState">
-          <p>No bots running in cluster — upload files above.</p>
+          <p>No services running — upload files above.</p>
         </div>
       </div>
     </div>
@@ -338,13 +370,13 @@ footer { border-top: 1px solid var(--border); padding: 50px 40px 30px; margin-to
         <button class="btn btn-ghost btn-sm" onclick="clearConsole()">Clear</button>
       </div>
       <div class="console-body" id="consoleBody">
-        <div class="console-line sys"><span class="time">--:--:--</span><span class="msg"><span class="prefix">neohost</span> › Multi-Hosting runtime online.</span></div>
+        <div class="console-line sys"><span class="time">--:--:--</span><span class="msg"><span class="prefix">neohost</span> › Universal multi-runtime online.</span></div>
       </div>
     </div>
   </div>
 </section>
 
-<footer><p>© 2026 NeoHost — Multi-Hosting Python Bot Cloud.</p></footer>
+<footer><p>© 2026 NeoHost — Universal Multi-Hosting Cloud.</p></footer>
 
 <script>
 const bots = [];
@@ -371,32 +403,33 @@ function log(msg, type = 'sys', source = 'neohost') {
 function clearConsole() { consoleBody.innerHTML = ''; log('Console cleared.', 'sys'); }
 
 dropzone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => { if (e.target.files.length) uploadMultipleFiles(e.target.files); });
+fileInput.addEventListener('change', e => { if (e.target.files.length) uploadUniversalFiles(e.target.files); });
 
-function uploadMultipleFiles(files) {
+function uploadUniversalFiles(files) {
   const formData = new FormData();
-  let mainPy = null;
+  let validFileFound = false;
   
   for (let i = 0; i < files.length; i++) {
     formData.append('files', files[i]);
-    if (files[i].name.endsWith('.py') && !mainPy) {
-      mainPy = files[i].name;
+    const ext = files[i].name.split('.').pop().toLowerCase();
+    if (['py', 'php', 'js', 'zip'].includes(ext)) {
+      validFileFound = true;
     }
   }
 
-  if (!mainPy) {
-    alert('Please include at least one .py file!');
+  if (!validFileFound) {
+    alert('Please include at least one valid .py, .php, .js, or .zip file!');
     return;
   }
 
-  log(`Uploading ${files.length} file(s) for multi-hosting execution...`, 'sys');
-  fetch('/api/deploy-multi', { method: 'POST', body: formData })
+  log(`Uploading ${files.length} file(s) to universal cluster...`, 'sys');
+  fetch('/api/deploy-universal', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
     if (data.status === 'success') {
       data.bots.forEach(b => {
         bots.push(b);
-        log(`Bot <b>${b.name}</b> deployed and executed live! ID: ${b.id}`, 'success');
+        log(`Service <b>${b.name}</b> deployed & executed! ID: ${b.id}`, 'success');
       });
       renderBots();
       if (data.bots.length > 0) {
@@ -435,7 +468,7 @@ function stopBot(id) {
     const idx = bots.findIndex(b => b.id === id);
     if (idx !== -1) bots.splice(idx, 1);
     renderBots();
-    log(`Bot process terminated.`, 'sys');
+    log(`Service terminated.`, 'sys');
   });
 }
 
@@ -448,7 +481,7 @@ function startLogPolling() {
     .then(data => {
       if (data.logs && data.logs.length) {
         consoleBody.innerHTML = '';
-        data.logs.forEach(l => log(l, 'success', 'bot'));
+        data.logs.forEach(l => log(l, 'success', 'service'));
       }
     });
   }, 2500);
@@ -462,44 +495,37 @@ function startLogPolling() {
 def index():
     return render_template_string(HTML_PAGE)
 
-@app.route("/api/deploy-multi", methods=["POST"])
-def deploy_multi():
-    # Terminate any existing active bots to avoid 409 Conflict clashes
-    for b_id, proc in list(active_bots.items()):
-        try:
-            proc.terminate()
-        except:
-            pass
-        active_bots.pop(b_id, None)
-
+@app.route("/api/deploy-universal", methods=["POST"])
+def deploy_universal():
     uploaded_files = request.files.getlist("files")
     if not uploaded_files:
         return jsonify({"status": "error", "message": "No files provided"})
     
-    bot_session_id = "cluster_" + os.urandom(3).hex()
-    bot_dir = os.path.join(UPLOAD_FOLDER, bot_session_id)
+    session_id = "cluster_" + os.urandom(3).hex()
+    bot_dir = os.path.join(UPLOAD_FOLDER, session_id)
     os.makedirs(bot_dir, exist_ok=True)
     
-    saved_py_files = []
+    executable_files = []
     for file in uploaded_files:
         if file.filename:
             file_path = os.path.join(bot_dir, file.filename)
             file.save(file_path)
-            if file.filename.endswith('.py'):
-                saved_py_files.append(file.filename)
+            ext = file.filename.split('.')[-1].lower()
+            if ext in ['py', 'php', 'js', 'zip']:
+                executable_files.append(file.filename)
                 
-    if not saved_py_files:
-        return jsonify({"status": "error", "message": "No .py files found in selection"})
+    if not executable_files:
+        return jsonify({"status": "error", "message": "No valid executable files found"})
     
     deployed_response = []
-    for py_file in saved_py_files:
-        bot_id = "bot_" + os.urandom(4).hex()
-        bot_logs[bot_id] = [f"Initializing fresh session for {py_file}..."]
+    for filename in executable_files:
+        bot_id = "srv_" + os.urandom(4).hex()
+        bot_logs[bot_id] = [f"Spawning runtime for {filename}..."]
         
-        t = threading.Thread(target=install_and_run_bot, args=(bot_id, bot_dir, py_file), daemon=True)
+        t = threading.Thread(target=universal_runtime_runner, args=(bot_id, bot_dir, filename), daemon=True)
         t.start()
         
-        deployed_response.append({"id": bot_id, "name": py_file})
+        deployed_response.append({"id": bot_id, "name": filename})
         
     return jsonify({"status": "success", "bots": deployed_response})
 
