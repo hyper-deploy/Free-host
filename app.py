@@ -3,6 +3,7 @@ import subprocess
 import threading
 import re
 import zipfile
+import shutil
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
@@ -104,17 +105,23 @@ def universal_runtime_runner(bot_id, bot_dir, filename):
 
         # 2. NODE.JS RUNTIME (.js)
         elif file_ext == '.js':
-            bot_logs[bot_id].append("Checking Node.js environment...")
+            if not shutil.which("node"):
+                bot_logs[bot_id].append("Error: Node.js runtime is not installed on this cloud server.")
+                bots_registry[bot_id]["status"] = "stopped"
+                return
             pkg_json = os.path.join(target_dir, "package.json")
             if os.path.exists(pkg_json):
-                bot_logs[bot_id].append("Running npm install...")
                 subprocess.run(["npm", "install"], cwd=target_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             cmd = ["node", file_path]
 
         # 3. PHP RUNTIME (.php)
         elif file_ext == '.php':
+            if not shutil.which("php"):
+                bot_logs[bot_id].append("Error: PHP runtime is not installed on Render Python environment.")
+                bot_logs[bot_id].append("Tip: Use Python (.py) or ZIP (.zip) projects for 100% compatibility.")
+                bots_registry[bot_id]["status"] = "stopped"
+                return
             port = str(8000 + (hash(bot_id) % 1000))
-            bot_logs[bot_id].append(f"Launching PHP built-in server on port {port}...")
             cmd = ["php", "-S", f"0.0.0.0:{port}", file_path]
 
         else:
@@ -561,7 +568,6 @@ def bot_action(bot_id, action):
     if action == "stop":
         if info["process"]:
             try:
-                info["process.terminate()" if hasattr(info["process"], "terminate") else "terminate"]()
                 info["process"].terminate()
                 info["process"].wait(timeout=0.5)
             except:
