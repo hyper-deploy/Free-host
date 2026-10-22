@@ -2,6 +2,7 @@ import os
 import subprocess
 import threading
 import re
+import zipfile
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
@@ -12,10 +13,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 bots_registry = {}
 bot_logs = {}
 
-def run_bot_process(bot_id, file_path, filename):
-    bot_logs[bot_id] = [f"[{filename}] Initializing hyper-runtime..."]
+def universal_runtime_runner(bot_id, bot_dir, filename):
+    bot_logs[bot_id] = [f"[{filename}] Initializing universal multi-runtime..."]
     try:
-        # Fast termination of existing process if any
         if bot_id in bots_registry and bots_registry[bot_id].get("process"):
             try:
                 proc = bots_registry[bot_id]["process"]
@@ -28,47 +28,104 @@ def run_bot_process(bot_id, file_path, filename):
                 except:
                     pass
 
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            code_content = f.read()
+        file_ext = os.path.splitext(filename)[1].lower()
+        target_dir = bot_dir
+
+        # Handle ZIP Archives
+        if file_ext == '.zip':
+            bot_logs[bot_id].append("Extracting ZIP archive...")
+            zip_path = os.path.join(bot_dir, filename)
+            extract_dir = os.path.join(bot_dir, "extracted_" + bot_id)
+            os.makedirs(extract_dir, exist_ok=True)
             
-        module_to_pkg = {
-            "telegram": "python-telegram-bot",
-            "telebot": "pyTelegramBotAPI",
-            "pyrogram": "pyrogram",
-            "aiogram": "aiogram",
-            "requests": "requests",
-            "bs4": "beautifulsoup4",
-            "aiohttp": "aiohttp",
-            "motor": "motor",
-            "pymongo": "pymongo",
-            "yt_dlp": "yt-dlp",
-            "PIL": "Pillow",
-            "openai": "openai",
-            "gtts": "gtts",
-            "psutil": "psutil"
-        }
-        
-        detected_pkgs = []
-        for mod, pkg in module_to_pkg.items():
-            if re.search(r'\b(import|from)\s+' + mod + r'\b', code_content):
-                detected_pkgs.append(pkg)
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            target_dir = extract_dir
+            files_in_ext = os.listdir(target_dir)
+            if 'main.py' in files_in_ext:
+                filename = 'main.py'; file_ext = '.py'
+            elif 'index.js' in files_in_ext:
+                filename = 'index.js'; file_ext = '.js'
+            elif 'index.php' in files_in_ext:
+                filename = 'index.php'; file_ext = '.php'
+            else:
+                found = False
+                for f in files_in_ext:
+                    if f.endswith('.py'):
+                        filename = f; file_ext = '.py'; found = True; break
+                    elif f.endswith('.js'):
+                        filename = f; file_ext = '.js'; found = True; break
+                    elif f.endswith('.php'):
+                        filename = f; file_ext = '.php'; found = True; break
+                if not found:
+                    bot_logs[bot_id].append("Error: No executable entry point found in ZIP.")
+                    bots_registry[bot_id]["status"] = "stopped"
+                    return
+
+        file_path = os.path.join(target_dir, filename)
+
+        # 1. PYTHON RUNTIME (.py)
+        if file_ext == '.py':
+            bot_logs[bot_id].append("Scanning Python dependencies...")
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    code_content = f.read()
+                module_to_pkg = {
+                    "telegram": "python-telegram-bot",
+                    "telebot": "pyTelegramBotAPI",
+                    "pyrogram": "pyrogram",
+                    "aiogram": "aiogram",
+                    "requests": "requests",
+                    "bs4": "beautifulsoup4",
+                    "aiohttp": "aiohttp",
+                    "motor": "motor",
+                    "pymongo": "pymongo",
+                    "yt_dlp": "yt-dlp",
+                    "PIL": "Pillow",
+                    "openai": "openai",
+                    "gtts": "gtts",
+                    "psutil": "psutil"
+                }
+                detected_pkgs = [pkg for mod, pkg in module_to_pkg.items() if re.search(r'\b(import|from)\s+' + mod + r'\b', code_content)]
+                if "pyrogram" in detected_pkgs and "Tgcrypto" not in detected_pkgs:
+                    detected_pkgs.append("Tgcrypto")
                 
-        if "pyrogram" in detected_pkgs and "Tgcrypto" not in detected_pkgs:
-            detected_pkgs.append("Tgcrypto")
+                req_path = os.path.join(target_dir, "requirements.txt")
+                if os.path.exists(req_path):
+                    bot_logs[bot_id].append("Installing requirements.txt...")
+                    subprocess.run(["pip", "install", "-r", req_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                
+                if detected_pkgs:
+                    bot_logs[bot_id].append(f"Installing packages: {', '.join(detected_pkgs)}...")
+                    subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             
-        req_path = os.path.join(os.path.dirname(file_path), "requirements.txt")
-        if os.path.exists(req_path):
-            bot_logs[bot_id].append("Scanning requirements.txt & installing dependencies...")
-            subprocess.run(["pip", "install", "-r", req_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            
-        if detected_pkgs:
-            bot_logs[bot_id].append(f"Installing packages: {', '.join(detected_pkgs)}...")
-            subprocess.run(["pip", "install", "--prefer-binary"] + detected_pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            bot_logs[bot_id].append("Dependencies ready ✓")
-            
-        bot_logs[bot_id].append(f"Launching process for {filename}...")
+            cmd = ["python", file_path]
+
+        # 2. NODE.JS RUNTIME (.js)
+        elif file_ext == '.js':
+            bot_logs[bot_id].append("Checking Node.js environment...")
+            pkg_json = os.path.join(target_dir, "package.json")
+            if os.path.exists(pkg_json):
+                bot_logs[bot_id].append("Running npm install...")
+                subprocess.run(["npm", "install"], cwd=target_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            cmd = ["node", file_path]
+
+        # 3. PHP RUNTIME (.php)
+        elif file_ext == '.php':
+            port = str(8000 + (hash(bot_id) % 1000))
+            bot_logs[bot_id].append(f"Launching PHP built-in server on port {port}...")
+            cmd = ["php", "-S", f"0.0.0.0:{port}", file_path]
+
+        else:
+            bot_logs[bot_id].append(f"Unsupported extension: {file_ext}")
+            bots_registry[bot_id]["status"] = "stopped"
+            return
+
+        bot_logs[bot_id].append(f"Executing {filename} live...")
         process = subprocess.Popen(
-            ["python", file_path],
+            cmd,
+            cwd=target_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -77,7 +134,7 @@ def run_bot_process(bot_id, file_path, filename):
         
         bots_registry[bot_id]["process"] = process
         bots_registry[bot_id]["status"] = "running"
-        bot_logs[bot_id].append("Bot is LIVE & RUNNING ✓")
+        bot_logs[bot_id].append("Service is LIVE & RUNNING ✓")
         
         for line in process.stdout:
             msg = line.strip()
@@ -113,8 +170,8 @@ HTML_PAGE = """<!DOCTYPE html>
 
 :root {
   --cyan: #00f0ff; --magenta: #ff00e5; --purple: #9d4edd; --green: #00ff88; --red: #ff3366; --yellow: #ffb703;
-  --bg: #030308; --card: rgba(18, 18, 30, 0.75); --card-hover: rgba(28, 28, 48, 0.9);
-  --border: rgba(0, 240, 255, 0.18); --border-glow: rgba(0, 240, 255, 0.7);
+  --bg: #030308; --card: rgba(18, 18, 30, 0.85); --card-hover: rgba(28, 28, 48, 0.95);
+  --border: rgba(0, 240, 255, 0.22); --border-glow: rgba(0, 240, 255, 0.8);
   --text: #f4f4f8; --muted: #9494a8; --font: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
 }
 
@@ -127,7 +184,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 
 /* Glowing Background FX */
 .bg-fx { position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; }
-.orb { position: absolute; border-radius: 50%; filter: blur(140px); opacity: 0.22; }
+.orb { position: absolute; border-radius: 50%; filter: blur(140px); opacity: 0.25; }
 .orb-1 { width: 400px; height: 400px; background: var(--cyan); top: -100px; left: -100px; }
 .orb-2 { width: 400px; height: 400px; background: var(--magenta); bottom: -100px; right: -100px; }
 
@@ -145,7 +202,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 /* App Header */
 .app-header {
   position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; background: rgba(3,3,8,0.88); backdrop-filter: blur(25px); border-bottom: 1px solid var(--border);
+  padding: 12px 16px; background: rgba(3,3,8,0.92); backdrop-filter: blur(25px); border-bottom: 1px solid var(--border);
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
 .app-title { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.1rem; }
@@ -177,17 +234,15 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 }
 
 /* Upload Grid */
-.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px; }
+.upload-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 12px; }
 .upload-card {
-  border: 2px dashed rgba(0,240,255,0.4); border-radius: 12px; padding: 18px 10px; text-align: center; cursor: pointer;
+  border: 2px dashed rgba(0,240,255,0.4); border-radius: 12px; padding: 14px 6px; text-align: center; cursor: pointer;
   background: rgba(0,240,255,0.03); transition: all 0.2s ease;
 }
-.upload-card:active { background: rgba(0,240,255,0.18); transform: scale(0.96); box-shadow: 0 0 25px rgba(0,240,255,0.7); border-color: var(--cyan); }
-.upload-card.req { border-color: rgba(255,0,229,0.4); background: rgba(255,0,229,0.03); }
-.upload-card.req:active { background: rgba(255,0,229,0.18); box-shadow: 0 0 25px rgba(255,0,229,0.7); border-color: var(--magenta); }
+.upload-card:active { background: rgba(0,240,255,0.2); transform: scale(0.96); box-shadow: 0 0 25px rgba(0,240,255,0.8); border-color: var(--cyan); }
 
 /* Bot Items */
-.bots-list { max-height: 380px; overflow-y: auto; }
+.bots-list { max-height: 400px; overflow-y: auto; }
 .bot-item { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 12px; transition: 0.2s; }
 .bot-item:hover { background: var(--card-hover); }
 .bot-top { display: flex; align-items: center; justify-content: space-between; }
@@ -275,15 +330,23 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 
   <!-- Upload Panel -->
   <div class="panel-box">
-    <div class="panel-header">📥 Project Deployment Center</div>
+    <div class="panel-header">📥 Universal Deployment Center</div>
     <div class="upload-grid">
       <div class="upload-card" onclick="triggerUpload('.py')">
-        <div style="font-size:26px; margin-bottom:6px; filter: drop-shadow(0 0 10px var(--cyan));">📦</div>
-        <div style="font-size:0.78rem; font-weight:700; color:var(--cyan)">Upload .py Script</div>
+        <div style="font-size:22px; margin-bottom:4px;">🐍</div>
+        <div style="font-size:0.72rem; font-weight:700; color:var(--cyan)">Python .py</div>
       </div>
-      <div class="upload-card req" onclick="triggerUpload('requirements.txt')">
-        <div style="font-size:26px; margin-bottom:6px; filter: drop-shadow(0 0 10px var(--magenta));">📄</div>
-        <div style="font-size:0.78rem; font-weight:700; color:var(--magenta)">Upload requirements</div>
+      <div class="upload-card" onclick="triggerUpload('.js')">
+        <div style="font-size:22px; margin-bottom:4px;">⚡</div>
+        <div style="font-size:0.72rem; font-weight:700; color:var(--yellow)">Node.js .js</div>
+      </div>
+      <div class="upload-card" onclick="triggerUpload('.php')">
+        <div style="font-size:22px; margin-bottom:4px;">🌐</div>
+        <div style="font-size:0.72rem; font-weight:700; color:var(--magenta)">PHP .php</div>
+      </div>
+      <div class="upload-card" onclick="triggerUpload('.zip')">
+        <div style="font-size:22px; margin-bottom:4px;">📦</div>
+        <div style="font-size:0.72rem; font-weight:700; color:var(--green)">ZIP Project</div>
       </div>
     </div>
     <input type="file" id="fileInput" multiple hidden />
@@ -292,10 +355,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <!-- Active Fleet Box -->
   <div class="panel-box">
     <div class="panel-header">
-      <span>🤖 Active Fleet Control</span>
+      <span>🤖 Active Multi-Host Fleet</span>
     </div>
     <div class="bots-list" id="botsListContainer">
-      <div style="padding: 30px; text-align: center; color: var(--muted); font-size: 0.78rem;">No bots active in cluster.</div>
+      <div style="padding: 30px; text-align: center; color: var(--muted); font-size: 0.78rem;">No services active in cluster.</div>
     </div>
   </div>
 
@@ -306,7 +369,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
       <button class="action-btn stop" onclick="clearLogs()" style="flex:none; padding:4px 10px;">Clear</button>
     </div>
     <div class="terminal-body" id="logsConsoleBody">
-      <div class="t-line" style="color:var(--cyan)">[neohost-pro] Control center active. Tap 'Logs' on any bot.</div>
+      <div class="t-line" style="color:var(--cyan)">[neohost-pro] Universal multi-runtime active. Tap 'Logs' on any bot.</div>
     </div>
   </div>
 
@@ -320,12 +383,8 @@ const botsListContainer = document.getElementById('botsListContainer');
 const logsConsoleBody = document.getElementById('logsConsoleBody');
 const activeLogTitle = document.getElementById('activeLogTitle');
 
-function triggerUpload(ext) {
-  if(ext === '.py') {
-    fileInput.accept = '.py';
-  } else {
-    fileInput.accept = '.txt';
-  }
+function triggerUpload(acceptExt) {
+  fileInput.accept = acceptExt + ',.txt';
   fileInput.click();
 }
 
@@ -363,7 +422,7 @@ function fetchBotsData() {
 
     const entries = Object.entries(bots);
     if(entries.length === 0) {
-      botsListContainer.innerHTML = `<div style="padding: 30px; text-align: center; color: var(--muted); font-size: 0.78rem;">No bots active in cluster.</div>`;
+      botsListContainer.innerHTML = `<div style="padding: 30px; text-align: center; color: var(--muted); font-size: 0.78rem;">No services active in cluster.</div>`;
       return;
     }
 
@@ -404,7 +463,7 @@ function controlBot(id, action) {
     if(action === 'delete' && viewingBotId === id) {
       viewingBotId = null;
       activeLogTitle.textContent = "📡 Console: Ready";
-      logsConsoleBody.innerHTML = `<div class="t-line" style="color:var(--cyan)">[neohost] Bot deleted.</div>`;
+      logsConsoleBody.innerHTML = `<div class="t-line" style="color:var(--cyan)">[neohost] Service deleted.</div>`;
     }
     fetchBotsData();
   });
@@ -460,23 +519,21 @@ def deploy():
             f.save(f_path)
             saved_files.append((f.filename, f_path))
             
-    py_scripts = [item for item in saved_files if item[0].endswith('.py')]
+    exec_files = [item for item in saved_files if item[0].lower().endswith(('.py', '.js', '.php', '.zip'))]
     
-    if not py_scripts and any(item[0] == 'requirements.txt' for item in saved_files):
-        return jsonify({"status": "success", "message": "requirements.txt uploaded successfully"})
+    if not exec_files:
+        return jsonify({"status": "error", "message": "Please upload a valid .py, .js, .php, or .zip project"})
         
-    if not py_scripts:
-        return jsonify({"status": "error", "message": "Please upload a valid .py script"})
-        
-    for filename, filepath in py_scripts:
-        bot_id = "bot_" + os.urandom(3).hex()
+    for filename, filepath in exec_files:
+        bot_id = "srv_" + os.urandom(3).hex()
         bots_registry[bot_id] = {
             "name": filename,
             "status": "running",
             "process": None,
-            "file_path": filepath
+            "file_path": filepath,
+            "dir_path": session_dir
         }
-        t = threading.Thread(target=run_bot_process, args=(bot_id, filepath, filename), daemon=True)
+        t = threading.Thread(target=universal_runtime_runner, args=(bot_id, session_dir, filename), daemon=True)
         t.start()
         
     return jsonify({"status": "success"})
@@ -498,14 +555,15 @@ def get_bots():
 @app.route("/api/bot/<bot_id>/<action>", methods=["POST"])
 def bot_action(bot_id, action):
     if bot_id not in bots_registry:
-        return jsonify({"status": "error", "message": "Bot not found"})
+        return jsonify({"status": "error", "message": "Service not found"})
         
     info = bots_registry[bot_id]
     if action == "stop":
         if info["process"]:
             try:
+                info["process.terminate()" if hasattr(info["process"], "terminate") else "terminate"]()
                 info["process"].terminate()
-                info["process"].wait(timeout=0.8)
+                info["process"].wait(timeout=0.5)
             except:
                 try:
                     info["process"].kill()
@@ -513,10 +571,11 @@ def bot_action(bot_id, action):
                     pass
         info["process"] = None
         info["status"] = "stopped"
-        bot_logs[bot_id].append("Bot stopped manually ⏹")
+        bot_logs[bot_id].append("Service stopped manually ⏹")
     elif action == "start":
-        t = threading.Thread(target=run_bot_process, args=(bot_id, info["file_path"], info["name"]), daemon=True)
-        t.start()
+        if info["status"] != "running":
+            t = threading.Thread(target=universal_runtime_runner, args=(bot_id, info["dir_path"], info["name"]), daemon=True)
+            t.start()
     elif action == "delete":
         if info["process"]:
             try:
